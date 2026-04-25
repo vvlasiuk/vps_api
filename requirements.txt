@@ -1,0 +1,9 @@
+# requirements.txt for VPS API Confirmation Server
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+pika
+alembic
+pydantic
+python-dotenv
