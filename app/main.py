@@ -83,7 +83,7 @@ def create_context(
         context_data=json.dumps(req.context_data),
         created_at=now,
         updated_at=now,
-        status=ContextStatus.active, end_at=req.end_at
+        end_at=req.end_at, closed=False
     )
     try:
         db.add(ctx)
@@ -98,7 +98,7 @@ def create_context(
         context_data=req.context_data,
         created_at=ctx.created_at,
         updated_at=ctx.updated_at,
-        status=ctx.status.value, end_at=ctx.end_at
+        end_at=ctx.end_at, closed=ctx.closed
     )
 
 @app.get("/context/{object_id}", response_model=ContextResponse)
@@ -112,7 +112,7 @@ def get_context(object_id: str, db: Session = Depends(get_db)):
 		context_data=json.loads(ctx.context_data),
 		created_at=ctx.created_at,
 		updated_at=ctx.updated_at,
-		status=ctx.status.value
+		closed=ctx.closed
 	)
 
 @app.get("/context_by_id/{id}", response_model=ContextResponse)
@@ -126,7 +126,7 @@ def get_context_by_id(id: int, db: Session = Depends(get_db)):
         context_data=json.loads(ctx.context_data),
         created_at=ctx.created_at,
         updated_at=ctx.updated_at,
-        status=ctx.status.value,
+        closed=ctx.closed,
         end_at=getattr(ctx, "end_at", None)
     )
 
@@ -136,8 +136,8 @@ def update_context(object_id: str, req: ContextUpdate, db: Session = Depends(get
 	if not ctx:
 		raise HTTPException(status_code=404, detail="Context not found")
 	ctx.context_data = json.dumps(req.context_data)
-	if req.status:
-		ctx.status = ContextStatus(req.status)
+	# if req.status:
+	# 	ctx.status = ContextStatus(req.status)
 	ctx.updated_at = datetime.datetime.utcnow()
 	db.commit()
 	db.refresh(ctx)
@@ -147,8 +147,33 @@ def update_context(object_id: str, req: ContextUpdate, db: Session = Depends(get
 		context_data=json.loads(ctx.context_data),
 		created_at=ctx.created_at,
 		updated_at=ctx.updated_at,
-		status=ctx.status.value
+		closed=ctx.closed
 	)
+
+@app.post("/context/{id}/close")
+def close_context(
+    id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+
+    ctx = db.query(Context).filter(Context.id == id).first()
+    if not ctx:
+        raise HTTPException(status_code=404, detail="Context not found")
+
+    ctx.closed = True
+    ctx.updated_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(ctx)
+    return {"status": "closed", "id": ctx.id}
 
 # --- /token endpoint ---
 @app.post("/token", response_model=TokenResponse)
@@ -226,3 +251,4 @@ def post_command(
 		raise HTTPException(status_code=500, detail="Failed to send command")
 
 	return {"status": "ok"}
+

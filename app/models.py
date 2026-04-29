@@ -1,5 +1,5 @@
 # Database models and SQLAlchemy setup for MariaDB
-from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, JSON, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import enum
@@ -46,6 +46,6 @@ class Context(Base):
     context_data = Column(Text)  # Arbitrary JSON as text
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
-    status = Column(Enum(ContextStatus), default=ContextStatus.active)
     end_at = Column(DateTime, nullable=True)
+    closed = Column(Boolean, default=False, nullable=False)
 

@@ -26,7 +26,7 @@ class ContextCreate(BaseModel):
 
 class ContextUpdate(BaseModel):
     context_data: Dict[str, Any]
-    status: Optional[str]
+    closed: Optional[bool]
     end_at: Optional[datetime]
 
 class ContextResponse(BaseModel):
@@ -35,5 +35,5 @@ class ContextResponse(BaseModel):
     context_data: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
-    status: str
+    closed: bool
     end_at: Optional[datetime]
