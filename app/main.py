@@ -7,8 +7,8 @@ from .database import SessionLocal
 from .error_logger import ErrorLogger
 from .rabbitmq_utils import send_command_to_rabbitmq
 import pika
-from .models import Context, ContextStatus, Token, MasterToken, MasterTokenStatus
-from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, TokenRequest, TokenResponse
+from .models import Context, ContextStatus, Token, MasterToken, MasterTokenStatus, User
+from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, TokenRequest, TokenResponse, UserCreate, UserResponse
 import os
 import datetime
 import json
@@ -251,4 +251,57 @@ def post_command(
 		raise HTTPException(status_code=500, detail="Failed to send command")
 
 	return {"status": "ok"}
+
+# --- /user endpoint ---
+@app.post("/users", response_model=UserResponse)
+def create_user(
+    req: UserCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+
+    now = datetime.datetime.utcnow()
+
+    user = User(
+        lastname=req.lastname,
+        firstname=req.firstname,
+        middlename=req.middlename,
+        position=req.position,
+        department=req.department,
+        city=req.city,
+        phone=req.phone,
+        email=req.email,
+        chat_id=req.chat_id,
+		role=req.role,
+		username=req.username,
+		created_at=now
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return UserResponse(
+        id=user.id,
+        lastname=user.lastname,
+        firstname=user.firstname,
+        middlename=user.middlename,
+        position=user.position,
+        department=user.department,
+        city=user.city,
+        phone=user.phone,
+        email=user.email,
+        chat_id=user.chat_id,
+        role=user.role,
+        username=user.username,
+		created_at=user.created_at
+    )
 

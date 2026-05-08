@@ -49,3 +49,19 @@ class Context(Base):
     end_at = Column(DateTime, nullable=True)
     closed = Column(Boolean, default=False, nullable=False)
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lastname = Column(String(255), nullable=True)
+    firstname = Column(String(255), nullable=True)
+    middlename = Column(String(255), nullable=True)
+    position = Column(String(255), nullable=True)
+    department = Column(String(255), nullable=True)
+    city = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    email = Column(String(255), nullable=True)
+    chat_id = Column(String(255), nullable=True)
+    role = Column(String(255), nullable=True)
+    username = Column(String(255), nullable=True)
+    created_at = Column(DateTime, nullable=True)
+

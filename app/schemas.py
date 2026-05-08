@@ -37,3 +37,32 @@ class ContextResponse(BaseModel):
     updated_at: datetime
     closed: bool
     end_at: Optional[datetime]
+
+class UserCreate(BaseModel):
+    lastname: Optional[str] = None
+    firstname: Optional[str] = None
+    middlename: Optional[str] = None
+    position: Optional[str] = None
+    department: Optional[str] = None
+    city: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    chat_id: Optional[str] = None
+    role: Optional[str] = None
+    username: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class UserResponse(BaseModel):
+    id: int
+    lastname: Optional[str] = None
+    firstname: Optional[str] = None
+    middlename: Optional[str] = None
+    position: Optional[str] = None
+    department: Optional[str] = None
+    city: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    chat_id: Optional[str] = None
+    role: Optional[str] = None
+    username: Optional[str] = None
+    created_at: Optional[datetime] = None
