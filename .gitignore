@@ -56,9 +56,6 @@ env/
 venv/
 ENV/
 
-# Alembic
-alembic/
-
 # OS files
 .DS_Store
 Thumbs.db
