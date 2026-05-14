@@ -8,7 +8,7 @@ from .error_logger import ErrorLogger
 from .rabbitmq_utils import send_command_to_rabbitmq
 import pika
 from .models import Context, ContextStatus, Token, MasterToken, MasterTokenStatus, User
-from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, TokenRequest, TokenResponse, UserCreate, UserResponse
+from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, CommandMasterRequest, TokenRequest, TokenResponse, UserCreate, UserResponse
 import os
 import datetime
 import json
@@ -216,29 +216,36 @@ def post_command(
 	req: CommandRequest,
 	db: Session = Depends(get_db)
 ):
-	token_str = req.token #credentials.credentials
-	token: Token = db.query(Token).filter(Token.token == token_str).first()
+	token_str = req.token
 	now = datetime.datetime.utcnow()
-	if not token:
-		error_logger.log_error("Invalid temporary token", responsibility="vps_api")
-		raise HTTPException(status_code=401, detail="Invalid token")
-	if token.expires_at and token.expires_at < now:
-		error_logger.log_error("Expired temporary token", responsibility="vps_api")
-		raise HTTPException(status_code=401, detail="Token expired")
-	if token.max_uses and token.usage_count >= token.max_uses:
-		error_logger.log_error("Token usage limit exceeded", responsibility="vps_api")
-		raise HTTPException(status_code=401, detail="Token usage limit exceeded")
 
-	# Update usage
-	token.usage_count = (token.usage_count or 0) + 1
-	token.last_used_at = now
-	db.commit()
+	# 1) Пробуємо тимчасовий токен
+	temp_token: Token = db.query(Token).filter(Token.token == token_str).first()
+	context_id = ""
+
+	if temp_token:
+		# Чинна валідація для тимчасового токена
+		if temp_token.expires_at and temp_token.expires_at < now:
+			error_logger.log_error("Expired temporary token", responsibility="vps_api")
+			raise HTTPException(status_code=401, detail="Token expired")
+		if temp_token.max_uses and temp_token.usage_count >= temp_token.max_uses:
+			error_logger.log_error("Token usage limit exceeded", responsibility="vps_api")
+			raise HTTPException(status_code=401, detail="Token usage limit exceeded")
+
+		# Update usage only for temp token
+		temp_token.usage_count = (temp_token.usage_count or 0) + 1
+		temp_token.last_used_at = now
+		db.commit()
+		context_id = temp_token.context_id or ""
+	else:
+		error_logger.log_error("Invalid token", responsibility="vps_api")
+		raise HTTPException(status_code=401, detail="Invalid token")    
 
 	# Формуємо повідомлення для input.queue
 	msg = {
 		"source": {
 			"system": "vps_api",
-			"context_id": token.context_id or ""
+			"context_id": context_id
 		},
 		"system": "API",
 		"command_name": req.command_name,
@@ -251,6 +258,41 @@ def post_command(
 		raise HTTPException(status_code=500, detail="Failed to send command")
 
 	return {"status": "ok"}
+
+# --- /command/master endpoint ---
+@app.post("/command/master")
+def post_command_master(
+    req: CommandMasterRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+
+    msg = {
+        "source": {
+            "system": "vps_api",
+            "context_id": ""
+        },
+        "system": "API",
+        "command_name": req.command_name,
+        "command_params": req.command_params
+    }
+
+    try:
+        send_command_to_rabbitmq(RABBITMQ_INPUT_QUEUE, msg, RABBITMQ_PARAMETERS)
+    except Exception as e:
+        error_logger.log_error(f"RabbitMQ error: {e}", responsibility="vps_api")
+        raise HTTPException(status_code=500, detail="Failed to send command")
+
+    return {"status": "ok"}
 
 # --- /user endpoint ---
 @app.post("/users", response_model=UserResponse)
@@ -281,9 +323,9 @@ def create_user(
         phone=req.phone,
         email=req.email,
         chat_id=req.chat_id,
-		role=req.role,
-		username=req.username,
-		created_at=now
+        role=req.role,
+        username=req.username,
+        created_at=now
     )
 
     db.add(user)
@@ -302,6 +344,6 @@ def create_user(
         chat_id=user.chat_id,
         role=user.role,
         username=user.username,
-		created_at=user.created_at
+        created_at=user.created_at
     )
 
