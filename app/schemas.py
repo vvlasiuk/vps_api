@@ -8,6 +8,10 @@ class CommandRequest(BaseModel):
     token: str
     command_params: Dict[str, Any]
 
+class CommandMasterRequest(BaseModel):
+    command_name: str
+    command_params: Dict[str, Any]
+
 class TokenRequest(BaseModel):
     expires_at: datetime
     max_uses: int = Field(..., gt=0)
