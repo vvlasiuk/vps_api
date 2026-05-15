@@ -63,5 +63,6 @@ Thumbs.db
 # Log files
 *.log
 api_error_*.log
+logs/
 
 run.bat

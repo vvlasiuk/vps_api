@@ -3,13 +3,19 @@ import logging
 from datetime import datetime
 import pika
 import json
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
 
 class ErrorLogger:
     def __init__(self, rabbitmq_url: str, queue_name: str = "sys_error.queue"):
         self.rabbitmq_url = rabbitmq_url
         self.queue_name = queue_name
         self.logger = logging.getLogger("api_error")
-        handler = logging.FileHandler(f"api_error_{datetime.now().strftime('%Y-%m-%d')}.log")
+        logs_dir = project_root / "logs"
+        logs_dir.mkdir(exist_ok=True)
+        log_file = logs_dir / f"api_error_{datetime.now().strftime('%Y-%m-%d')}.log"
+        handler = logging.FileHandler(log_file, encoding="utf-8")
         formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)

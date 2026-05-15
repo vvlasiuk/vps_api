@@ -1,3 +1,7 @@
+import pathlib
+from dotenv import load_dotenv
+load_dotenv(pathlib.Path(__file__).parent.parent / ".env", override=True)
+
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -18,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 
 app = FastAPI(title="VPS API Confirmation Server", debug=True)
 
+
 # Dependency to get DB session
 def get_db():
 	db = SessionLocal()
@@ -35,7 +40,7 @@ RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 RABBITMQ_VHOST = os.getenv("RABBITMQ_VHOST", "/")
-RABBITMQ_INPUT_QUEUE = os.getenv("RABBITMQ_INPUT_QUEUE", "input.queue")
+RABBITMQ_INPUT_QUEUE = os.getenv("RABBITMQ_INPUT_QUEUE", "input.events")
 RABBITMQ_ERROR_QUEUE = os.getenv("RABBITMQ_ERROR_QUEUE", "sys_error.queue")
 
 RABBITMQ_PARAMETERS = pika.ConnectionParameters(
