@@ -1,4 +1,22 @@
+@echo off
+setlocal
+
 cd /d "%~dp0"
-"%~dp0.venv\Scripts\Python.exe" -m uvicorn "app.main:app" --env-file "%~dp0.env" --host 0.0.0.0 --port 8000 --reload
 
+REM 1) Міграції БД
+"%~dp0.venv\Scripts\Python.exe" -m alembic upgrade head
+if errorlevel 1 (
+    echo [ERROR] Alembic migration failed. Server will not start.
+    pause
+    exit /b 1
+)
 
+REM 2) Запуск API
+"%~dp0.venv\Scripts\Python.exe" -m uvicorn app.main:app --env-file "%~dp0.env" --host 0.0.0.0 --port 8000
+if errorlevel 1 (
+    echo [ERROR] API server stopped with error.
+    pause
+    exit /b 1
+)
+
+endlocal

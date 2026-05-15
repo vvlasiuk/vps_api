@@ -42,7 +42,7 @@ class Token(Base):
 class Context(Base):
     __tablename__ = "context"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    object_id = Column(String(255), unique=True, nullable=False)
+    object_id = Column(String(255), nullable=False)
     context_data = Column(Text)  # Arbitrary JSON as text
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
