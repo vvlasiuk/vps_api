@@ -70,3 +70,27 @@ class UserResponse(BaseModel):
     role: Optional[str] = None
     username: Optional[str] = None
     created_at: Optional[datetime] = None
+
+class GlobalMessageContextSchema(BaseModel):
+    global_msg_id: int
+    context_id: int
+
+class GlobalMessageTelegramSchema(BaseModel):
+    global_msg_id: int
+    chat_id: int
+    message_id: int
+
+class GlobalMessageContextCreate(BaseModel):
+    context_id: int | None = None
+
+class GlobalMessageContextRead(BaseModel):
+    global_msg_id: int
+    context_id: int | None
+
+class GlobalMessageTelegramCreate(BaseModel):
+    global_msg_id: int
+    chat_id: int | None = None
+    message_id: int | None = None
+
+class GlobalMessageTelegramRead(GlobalMessageTelegramCreate):
+    id: int

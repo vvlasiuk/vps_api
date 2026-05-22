@@ -65,3 +65,15 @@ class User(Base):
     username = Column(String(255), nullable=True)
     created_at = Column(DateTime, nullable=True)
 
+class GlobalMessageContext(Base):
+    __tablename__ = "global_message_context"
+    global_msg_id = Column(Integer, primary_key=True, autoincrement=True)
+    context_id = Column(Integer, nullable=True)
+
+class GlobalMessageTelegram(Base):
+    __tablename__ = "global_message_telegram"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    global_msg_id = Column(Integer, nullable=False)
+    chat_id = Column(Integer, nullable=True)
+    message_id = Column(Integer, nullable=True)
+

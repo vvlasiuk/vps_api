@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from . import models, schemas
-from .database import SessionLocal
+from .database import SessionLocal, engine
 from .error_logger import ErrorLogger
 from .rabbitmq_utils import send_command_to_rabbitmq
 import pika
@@ -19,6 +19,8 @@ import json
 import secrets
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
+
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="VPS API Confirmation Server", debug=True)
 
@@ -351,4 +353,76 @@ def create_user(
         username=user.username,
         created_at=user.created_at
     )
+
+# --- GlobalMessageContext endpoints ---
+
+@app.post("/global_message_context/", response_model=schemas.GlobalMessageContextRead)
+def create_global_message_context(
+    item: schemas.GlobalMessageContextCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+    db_item = models.GlobalMessageContext(**item.dict())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@app.get("/global_message_context/", response_model=list[schemas.GlobalMessageContextRead])
+def read_global_message_contexts(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+    return db.query(models.GlobalMessageContext).all()
+
+@app.post("/global_message_telegram/", response_model=schemas.GlobalMessageTelegramRead)
+def create_global_message_telegram(
+    item: schemas.GlobalMessageTelegramCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+    db_item = models.GlobalMessageTelegram(**item.dict())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@app.get("/global_message_telegram/", response_model=list[schemas.GlobalMessageTelegramRead])
+def read_global_message_telegrams(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+    return db.query(models.GlobalMessageTelegram).all()
 
