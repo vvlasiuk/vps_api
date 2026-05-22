@@ -378,6 +378,7 @@ def create_global_message_context(
 
 @app.get("/global_message_context/", response_model=list[schemas.GlobalMessageContextRead])
 def read_global_message_contexts(
+    global_msg_id: int | None = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
@@ -389,7 +390,10 @@ def read_global_message_contexts(
     if not master_token:
         error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
         raise HTTPException(status_code=401, detail="Invalid or revoked master token")
-    return db.query(models.GlobalMessageContext).all()
+    query = db.query(models.GlobalMessageContext)
+    if global_msg_id is not None:
+        query = query.filter(models.GlobalMessageContext.global_msg_id == global_msg_id)
+    return query.all()
 
 @app.post("/global_message_telegram/", response_model=schemas.GlobalMessageTelegramRead)
 def create_global_message_telegram(
@@ -413,6 +417,7 @@ def create_global_message_telegram(
 
 @app.get("/global_message_telegram/", response_model=list[schemas.GlobalMessageTelegramRead])
 def read_global_message_telegrams(
+    global_msg_id: int | None = None,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
@@ -424,5 +429,8 @@ def read_global_message_telegrams(
     if not master_token:
         error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
         raise HTTPException(status_code=401, detail="Invalid or revoked master token")
-    return db.query(models.GlobalMessageTelegram).all()
+    query = db.query(models.GlobalMessageTelegram)
+    if global_msg_id is not None:
+        query = query.filter(models.GlobalMessageTelegram.global_msg_id == global_msg_id)
+    return query.all()
 
