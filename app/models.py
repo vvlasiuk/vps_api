@@ -1,5 +1,5 @@
 # Database models and SQLAlchemy setup for MariaDB
-from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, JSON, ForeignKey, Boolean, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import enum
@@ -74,6 +74,6 @@ class GlobalMessageTelegram(Base):
     __tablename__ = "global_message_telegram"
     id = Column(Integer, primary_key=True, autoincrement=True)
     global_msg_id = Column(Integer, nullable=False)
-    chat_id = Column(Integer, nullable=True)
+    chat_id = Column(BigInteger, nullable=True)
     message_id = Column(Integer, nullable=True)
 
