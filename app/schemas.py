@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict
 from datetime import datetime
+# import httpx
 
 class CommandRequest(BaseModel):
     command_name: str
@@ -55,6 +56,8 @@ class UserCreate(BaseModel):
     role: Optional[str] = None
     username: Optional[str] = None
     created_at: Optional[datetime] = None
+    password: Optional[str] = None
+    is_active: bool = True
 
 class UserResponse(BaseModel):
     id: int
@@ -70,6 +73,23 @@ class UserResponse(BaseModel):
     role: Optional[str] = None
     username: Optional[str] = None
     created_at: Optional[datetime] = None
+    username: Optional[str] = None
+    is_active: bool
+
+class UserUpdate(BaseModel):
+    lastname: Optional[str] = None
+    firstname: Optional[str] = None
+    middlename: Optional[str] = None
+    position: Optional[str] = None
+    department: Optional[str] = None
+    city: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    chat_id: Optional[str] = None
+    role: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class GlobalMessageContextSchema(BaseModel):
     global_msg_id: int
@@ -94,3 +114,33 @@ class GlobalMessageTelegramCreate(BaseModel):
 
 class GlobalMessageTelegramRead(GlobalMessageTelegramCreate):
     id: int
+
+# Додати в кінець schemas.py
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    token: str
+    expires_at: datetime
+    user_id: int
+    username: str
+    role: Optional[str] = None    
+
+class QueryParam(BaseModel):
+    type: str
+    value: Any
+
+class OneCQueryRequest(BaseModel):
+    query:   str                                  # ім'я запиту з конфігу, напр. "ref_contractors"
+    fields:  Optional[list[str]] = None           # які поля результату повернути (None = всі)
+    filters: Optional[str] = None                 # додатковий відбір по аліасах, напр. "name ПОДОБНО &search"
+    params:  Optional[Dict[str, QueryParam]] = None  # значення параметрів для filters
+    order:   Optional[str] = None                 # сортування по аліасах, напр. "name"
+    offset:  int = 0
+    limit:   int = 100
+
+class OneCQueryResponse(BaseModel):
+    total: int
+    rows: list[Dict[str, Any]]    

@@ -12,18 +12,31 @@ from .error_logger import ErrorLogger
 from .rabbitmq_utils import send_command_to_rabbitmq
 import pika
 from .models import Context, ContextStatus, Token, MasterToken, MasterTokenStatus, User
-from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, CommandMasterRequest, TokenRequest, TokenResponse, UserCreate, UserResponse
+from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, CommandMasterRequest, TokenRequest, TokenResponse, UserCreate, UserResponse, UserUpdate, LoginRequest, LoginResponse, OneCQueryRequest, OneCQueryResponse
 import os
 import datetime
 import json
 import secrets
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
+import httpx
+import bcrypt as bcrypt_lib
+from . import query_loader
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="VPS API Confirmation Server", debug=True)
 
+query_loader.load_queries()
+
+from fastapi.staticfiles import StaticFiles
+app.mount("/html", StaticFiles(directory="html", html=True), name="html")
+
+def hash_password(password: str) -> str:
+    return bcrypt_lib.hashpw(password.encode(), bcrypt_lib.gensalt()).decode()
+ 
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt_lib.checkpw(password.encode(), hashed.encode())
 
 # Dependency to get DB session
 def get_db():
@@ -35,6 +48,8 @@ def get_db():
 
 # Error logger instance
 
+ONEC_QUERY_URL = os.getenv("ONEC_QUERY_URL",   "")
+ONEC_TOKEN = os.getenv("ONEC_TOKEN", "")
 # Формуємо RabbitMQ URL з окремих змінних
 
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
@@ -332,6 +347,8 @@ def create_user(
         chat_id=req.chat_id,
         role=req.role,
         username=req.username,
+        password=hash_password(req.password) if req.password else None,
+        is_active=req.is_active,
         created_at=now
     )
 
@@ -351,8 +368,207 @@ def create_user(
         chat_id=user.chat_id,
         role=user.role,
         username=user.username,
+        is_active=user.is_active,
         created_at=user.created_at
     )
+
+@app.put("/users/{id}", response_model=UserResponse)
+def update_user(
+    id: int,
+    req: UserUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+
+    user = db.query(User).filter(User.id == id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if req.lastname   is not None: user.lastname   = req.lastname
+    if req.firstname  is not None: user.firstname  = req.firstname
+    if req.middlename is not None: user.middlename = req.middlename
+    if req.position   is not None: user.position   = req.position
+    if req.department is not None: user.department = req.department
+    if req.city       is not None: user.city       = req.city
+    if req.phone      is not None: user.phone      = req.phone
+    if req.email      is not None: user.email      = req.email
+    if req.chat_id    is not None: user.chat_id    = req.chat_id
+    if req.role       is not None: user.role       = req.role
+    if req.username   is not None: user.username   = req.username
+    if req.is_active  is not None: user.is_active  = req.is_active
+    if req.password is not None: user.password = hash_password(req.password)
+
+    db.commit()
+    db.refresh(user)
+    return UserResponse(
+        id=user.id,
+        lastname=user.lastname,
+        firstname=user.firstname,
+        middlename=user.middlename,
+        position=user.position,
+        department=user.department,
+        city=user.city,
+        phone=user.phone,
+        email=user.email,
+        chat_id=user.chat_id,
+        role=user.role,
+        username=user.username,
+        is_active=user.is_active,
+        created_at=user.created_at,
+    )
+
+# Додати після POST /users в main.py
+
+@app.get("/users", response_model=list[UserResponse])
+def get_users(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    master_token_str = credentials.credentials
+    master_token = db.query(MasterToken).filter(
+        MasterToken.token == master_token_str,
+        MasterToken.status == MasterTokenStatus.active
+    ).first()
+
+    if not master_token:
+        error_logger.log_error("Invalid or revoked master token", responsibility="vps_api")
+        raise HTTPException(status_code=401, detail="Invalid or revoked master token")
+
+    users = db.query(User).order_by(User.lastname).all()
+    return [
+        UserResponse(
+            id=u.id,
+            lastname=u.lastname,
+            firstname=u.firstname,
+            middlename=u.middlename,
+            position=u.position,
+            department=u.department,
+            city=u.city,
+            phone=u.phone,
+            email=u.email,
+            chat_id=u.chat_id,
+            role=u.role,
+            username=u.username,
+            is_active=u.is_active,
+            created_at=u.created_at,
+        )
+        for u in users
+    ]
+@app.post("/auth/login", response_model=LoginResponse)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+ 
+    user = db.query(User).filter(
+        User.username == req.username,
+        User.is_active == True
+    ).first()
+ 
+    if not user or not user.password:
+        raise HTTPException(status_code=401, detail="Невірний логін або пароль")
+ 
+    if not verify_password(req.password, user.password):
+        raise HTTPException(status_code=401, detail="Невірний логін або пароль")
+ 
+    now = datetime.datetime.utcnow()
+    expires_at = now + datetime.timedelta(hours=8)
+ 
+    token_str = secrets.token_urlsafe(32)
+    token = Token(
+        token=token_str,
+        created_at=now,
+        expires_at=expires_at,
+        max_uses=99999,
+        usage_count=0,
+        context_id=str(user.id),
+    )
+    db.add(token)
+    db.commit()
+ 
+    return LoginResponse(
+        token=token_str,
+        expires_at=expires_at,
+        user_id=user.id,
+        username=user.username,
+        role=user.role,
+    )
+
+@app.post("/1c/query", response_model=OneCQueryResponse)
+def onec_query(
+    req: OneCQueryRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    token_str = credentials.credentials
+    now = datetime.datetime.utcnow()
+ 
+    # Перевірка токену сесії
+    token = db.query(Token).filter(Token.token == token_str).first()
+    if not token:
+        raise HTTPException(status_code=401, detail="Невірний токен")
+    if token.expires_at and token.expires_at < now:
+        raise HTTPException(status_code=401, detail="Токен застарів")
+    if token.max_uses and token.usage_count >= token.max_uses:
+        raise HTTPException(status_code=401, detail="Перевищено ліміт використань")
+ 
+    token.usage_count = (token.usage_count or 0) + 1
+    token.last_used_at = now
+    db.commit()
+ 
+    # Знаходимо запит у конфігу
+    cfg = query_loader.get_query(req.query)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"Запит '{req.query}' не знайдено")
+ 
+    inner_query = cfg["query"]
+ 
+    # Поля результату: перелік або всі
+    fields_sql = ", ".join(req.fields) if req.fields else "*"
+ 
+    # Обгортаємо внутрішній запит у підзапит, накладаємо поля/відбір/сортування
+    wrapped = f"ВЫБРАТЬ {fields_sql}\nИЗ (\n{inner_query}\n) КАК Вложенный"
+ 
+    if req.filters:
+        wrapped += f"\nГДЕ {req.filters}"
+ 
+    if req.order:
+        wrapped += f"\nУПОРЯДОЧИТЬ ПО {req.order}"
+ 
+    # Параметри для 1С (з filters)
+    onec_params = {}
+    if req.params:
+        for key, p in req.params.items():
+            onec_params[key] = {"type": p.type, "value": p.value}
+ 
+    payload = {
+        "token":  ONEC_TOKEN,
+        "query":  wrapped,
+        "params": onec_params,
+        "offset": req.offset,
+        "limit":  req.limit,
+    }
+ 
+    try:
+        response = httpx.post(ONEC_QUERY_URL, json=payload, timeout=30)
+    except httpx.RequestError as e:
+        error_logger.log_error(f"1С недоступний: {e}", responsibility="vps_api")
+        raise HTTPException(status_code=503, detail="1С сервіс недоступний")
+ 
+    if response.status_code == 401:
+        raise HTTPException(status_code=502, detail="Помилка авторизації до 1С")
+ 
+    if response.status_code != 200:
+        data = response.json()
+        raise HTTPException(status_code=502, detail=data.get("error", "Помилка 1С"))
+ 
+    return response.json()
 
 # --- GlobalMessageContext endpoints ---
 

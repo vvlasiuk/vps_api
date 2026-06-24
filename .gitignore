@@ -66,3 +66,6 @@ api_error_*.log
 logs/
 
 run.bat
+
+html/
+queries1c/

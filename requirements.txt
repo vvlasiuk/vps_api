@@ -7,3 +7,5 @@ pika
 alembic
 pydantic
 python-dotenv
+httpx
+bcrypt

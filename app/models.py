@@ -64,6 +64,8 @@ class User(Base):
     role = Column(String(255), nullable=True)
     username = Column(String(255), nullable=True)
     created_at = Column(DateTime, nullable=True)
+    password = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
 
 class GlobalMessageContext(Base):
     __tablename__ = "global_message_context"
