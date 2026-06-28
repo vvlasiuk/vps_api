@@ -1,4 +1,5 @@
 import pathlib
+from urllib import response
 from dotenv import load_dotenv
 load_dotenv(pathlib.Path(__file__).parent.parent / ".env", override=True)
 
@@ -12,7 +13,7 @@ from .error_logger import ErrorLogger
 from .rabbitmq_utils import send_command_to_rabbitmq
 import pika
 from .models import Context, ContextStatus, Token, MasterToken, MasterTokenStatus, User
-from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, CommandMasterRequest, TokenRequest, TokenResponse, UserCreate, UserResponse, UserUpdate, LoginRequest, LoginResponse, OneCQueryRequest, OneCQueryResponse
+from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, CommandMasterRequest, TokenRequest, TokenResponse, UserCreate, UserResponse, UserUpdate, LoginRequest, LoginResponse, OneCQueryRequest, OneCQueryResponse, SaveDocRequest, SaveDocResponse 
 import os
 import datetime
 import json
@@ -48,7 +49,10 @@ def get_db():
 
 # Error logger instance
 
-ONEC_QUERY_URL = os.getenv("ONEC_QUERY_URL",   "")
+ONEC_BASE_URL     = os.getenv("ONEC_BASE_URL")      # http://127.0.0.1/utptestbas/hs/vps
+ONEC_QUERY_URL    = f"{ONEC_BASE_URL}/query"
+ONEC_SAVE_DOC_URL = f"{ONEC_BASE_URL}/save_doc"
+ONEC_SAVE_CAT_URL = f"{ONEC_BASE_URL}/save_cat"
 ONEC_TOKEN = os.getenv("ONEC_TOKEN", "")
 # Формуємо RabbitMQ URL з окремих змінних
 
@@ -488,6 +492,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         max_uses=99999,
         usage_count=0,
         context_id=str(user.id),
+        user_id=user.id
     )
     db.add(token)
     db.commit()
@@ -500,16 +505,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         role=user.role,
     )
 
-@app.post("/1c/query", response_model=OneCQueryResponse)
-def onec_query(
-    req: OneCQueryRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    token_str = credentials.credentials
+def _check_session_token(token_str: str, db: Session) -> Token:
     now = datetime.datetime.utcnow()
- 
-    # Перевірка токену сесії
     token = db.query(Token).filter(Token.token == token_str).first()
     if not token:
         raise HTTPException(status_code=401, detail="Невірний токен")
@@ -517,11 +514,51 @@ def onec_query(
         raise HTTPException(status_code=401, detail="Токен застарів")
     if token.max_uses and token.usage_count >= token.max_uses:
         raise HTTPException(status_code=401, detail="Перевищено ліміт використань")
- 
     token.usage_count = (token.usage_count or 0) + 1
     token.last_used_at = now
     db.commit()
- 
+    return token
+
+
+# ── Спільний виклик методів запису 1С (save_doc / у майбутньому save_cat) ──
+def _call_onec_save(url: str, payload: dict) -> dict:
+    payload = {**payload, "token": ONEC_TOKEN}
+    try:
+        response = httpx.post(url, json=payload, timeout=30)
+    except httpx.RequestError as e:
+        error_logger.log_error(f"1С недоступний: {e}", responsibility="vps_api")
+        raise HTTPException(status_code=503, detail="1С сервіс недоступний")
+
+    if response.status_code == 401:
+        raise HTTPException(status_code=502, detail="Помилка авторизації до 1С")
+
+    if response.status_code == 409:
+        try:
+            data = response.json()
+            detail = data.get("error", "Документ змінено іншим користувачем")
+        except Exception:
+            detail = "Документ змінено іншим користувачем"
+        raise HTTPException(status_code=409, detail=detail)
+
+    if response.status_code != 200:
+        try:
+            data = response.json()
+            detail = data.get("error", "Помилка 1С")
+        except Exception:
+            detail = f"1С повернула HTTP {response.status_code}: {response.text[:300]}"
+        error_logger.log_error(f"1С помилка: {detail}", responsibility="vps_api")
+        raise HTTPException(status_code=502, detail=detail)
+
+    return response.json()
+
+@app.post("/1c/query", response_model=OneCQueryResponse)
+def onec_query(
+    req: OneCQueryRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    token = _check_session_token(credentials.credentials, db)
+    
     # Знаходимо запит у конфігу
     cfg = query_loader.get_query(req.query)
     if not cfg:
@@ -566,10 +603,44 @@ def onec_query(
  
     if response.status_code != 200:
         data = response.json()
+        error_logger.log_error(f"1С помилка: {data}", responsibility="vps_api")
         raise HTTPException(status_code=502, detail=data.get("error", "Помилка 1С"))
  
     return response.json()
 
+@app.post("/1c/save_doc", response_model=SaveDocResponse)
+def onec_save_doc(
+    req: SaveDocRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    token = _check_session_token(credentials.credentials, db)
+
+    # fields у формат 1С
+    onec_fields = {}
+    if req.fields:
+        for key, p in req.fields.items():
+            onec_fields[key] = {"type": p.type, "value": p.value}
+
+    # Ответственный підставляє СЕРВЕР із сесії (token.user_id) — фронт цим не керує
+    username = None
+    if token.user_id:
+        user = db.query(User).filter(User.id == token.user_id).first()
+        if user:
+            username = user.username
+    if username:
+        onec_fields["Ответственный"] = {"type": "string", "value": username}
+
+    payload = {
+        "document": req.document,
+        "ref":      req.ref,
+        "version":  req.version,
+        "date":     req.date,
+        "action":   req.action,
+        "fields":   onec_fields,
+    }
+
+    return _call_onec_save(ONEC_SAVE_DOC_URL, payload)
 # --- GlobalMessageContext endpoints ---
 
 @app.post("/global_message_context/", response_model=schemas.GlobalMessageContextRead)

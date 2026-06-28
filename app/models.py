@@ -38,6 +38,7 @@ class Token(Base):
     last_used_at = Column(DateTime)
     context_id = Column(String(255))
     issued_by_token = relationship("MasterToken", back_populates="tokens")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 class Context(Base):
     __tablename__ = "context"

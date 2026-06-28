@@ -1,15 +1,17 @@
 # query_loader.py — завантаження конфігів запитів 1С
-# Сканує теку queries1c/, парує .sel (текст запиту) + .json (метадані)
-# за іменем файлу. Викликається один раз при старті.
+# Сканує теку queries1c/, парує .sel (текст запиту) + .json (метадані).
+# Файли паруються за ІМЕНЕМ ФАЙЛУ (може бути кирилицею).
+# Запит РЕЄСТРУЄТЬСЯ за полем "query_name" з .json (трансліт/ASCII-ідентифікатор).
+# Викликається один раз при старті.
 
 import os
 import json
-import re
 
 # Тека з конфігами запитів (поряд з app/)
 QUERIES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "queries1c")
 
-# Мапа завантажених запитів: { "ref_contractors": {"query": "...", "info": "...", "fields": [...]} }
+# Мапа завантажених запитів за query_name:
+#   { "cat_contractors": {"query": "...", "info": "...", "fields": [...], "_file": "..."} }
 _queries = {}
 
 
@@ -22,7 +24,8 @@ def _strip_comments(text: str) -> str:
 
 def load_queries() -> dict:
     """Рекурсивно сканує QUERIES_DIR, завантажує всі .sel + парні .json.
-    Повертає мапу запитів за іменем файлу (без розширення)."""
+    Реєструє запити за полем query_name з .json.
+    Повертає мапу запитів за query_name."""
     global _queries
     _queries = {}
 
@@ -35,9 +38,9 @@ def load_queries() -> dict:
             if not filename.endswith(".sel"):
                 continue
 
-            name = filename[:-4]  # ім'я без .sel
-            sel_path = os.path.join(root, filename)
-            json_path = os.path.join(root, name + ".json")
+            file_base = filename[:-4]  # ім'я файлу без .sel (для парування й логів)
+            sel_path  = os.path.join(root, filename)
+            json_path = os.path.join(root, file_base + ".json")
 
             # Текст запиту з .sel (без коментарів)
             try:
@@ -47,20 +50,36 @@ def load_queries() -> dict:
                 print(f"[query_loader] Помилка читання {sel_path}: {e}")
                 continue
 
-            # Метадані з парного .json (необов'язковий)
-            meta = {}
-            if os.path.isfile(json_path):
-                try:
-                    with open(json_path, "r", encoding="utf-8") as f:
-                        meta = json.load(f)
-                except Exception as e:
-                    print(f"[query_loader] Помилка читання {json_path}: {e}")
+            # Метадані з парного .json — ТЕПЕР ОБОВ'ЯЗКОВІ (містять query_name)
+            if not os.path.isfile(json_path):
+                print(f"[query_loader] ПРОПУЩЕНО '{file_base}': немає парного .json (потрібен query_name)")
+                continue
 
-            # Останній з однаковим іменем перемагає
-            _queries[name] = {
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+            except Exception as e:
+                print(f"[query_loader] ПРОПУЩЕНО '{file_base}': помилка читання .json: {e}")
+                continue
+
+            # query_name — обов'язковий ідентифікатор реєстрації
+            query_name = meta.get("query_name")
+            if not query_name or not str(query_name).strip():
+                print(f"[query_loader] ПРОПУЩЕНО '{file_base}': відсутнє поле query_name у .json")
+                continue
+            query_name = str(query_name).strip()
+
+            # Захист від дублів query_name (два файли з однаковим ідентифікатором)
+            if query_name in _queries:
+                prev = _queries[query_name].get("_file", "?")
+                print(f"[query_loader] УВАГА: дубль query_name '{query_name}' "
+                      f"(файл '{file_base}' перезапише '{prev}')")
+
+            _queries[query_name] = {
                 "query":  query_text,
                 "info":   meta.get("info", ""),
                 "fields": meta.get("fields", []),
+                "_file":  file_base,  # службове: з якого файлу завантажено (для діагностики)
             }
 
     print(f"[query_loader] Завантажено запитів: {len(_queries)}")
@@ -68,10 +87,10 @@ def load_queries() -> dict:
 
 
 def get_query(name: str) -> dict | None:
-    """Повертає конфіг запиту за іменем або None."""
+    """Повертає конфіг запиту за query_name або None."""
     return _queries.get(name)
 
 
 def list_queries() -> dict:
-    """Повертає всі завантажені запити (для AI-агента / документації)."""
+    """Повертає всі завантажені запити (за query_name) — для AI-агента / документації."""
     return _queries

@@ -128,7 +128,7 @@ class LoginResponse(BaseModel):
     username: str
     role: Optional[str] = None    
 
-class QueryParam(BaseModel):
+class OneCValue(BaseModel):
     type: str
     value: Any
 
@@ -136,7 +136,7 @@ class OneCQueryRequest(BaseModel):
     query:   str                                  # ім'я запиту з конфігу, напр. "ref_contractors"
     fields:  Optional[list[str]] = None           # які поля результату повернути (None = всі)
     filters: Optional[str] = None                 # додатковий відбір по аліасах, напр. "name ПОДОБНО &search"
-    params:  Optional[Dict[str, QueryParam]] = None  # значення параметрів для filters
+    params:  Optional[Dict[str, OneCValue]] = None  # значення параметрів для filters
     order:   Optional[str] = None                 # сортування по аліасах, напр. "name"
     offset:  int = 0
     limit:   int = 100
@@ -144,3 +144,19 @@ class OneCQueryRequest(BaseModel):
 class OneCQueryResponse(BaseModel):
     total: int
     rows: list[Dict[str, Any]]    
+
+class SaveDocRequest(BaseModel):
+    document: str
+    ref: str = ""                                      # "" → створення, guid → редагування
+    version: str = ""                                  # ВерсияДанных для перевірки актуальності
+    date: str                                          # ISO, передається завжди
+    action: str = "write"                              # write | post | unpost | mark_delete
+    fields: Optional[Dict[str, OneCValue]] = None     # реквізити документа (формат як у query)
+
+class SaveDocResponse(BaseModel):
+    ref: str
+    number: str
+    date: Optional[str] = None
+    version: str
+    posted: bool
+    marked: bool    
