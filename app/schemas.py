@@ -143,7 +143,8 @@ class OneCQueryRequest(BaseModel):
 
 class OneCQueryResponse(BaseModel):
     total: int
-    rows: list[Dict[str, Any]]    
+    rows: list[Dict[str, Any]]   
+    total_time: int = 0 
 
 class SaveDocRequest(BaseModel):
     document: str
@@ -152,6 +153,7 @@ class SaveDocRequest(BaseModel):
     date: str                                          # ISO, передається завжди
     action: str = "write"                              # write | post | unpost | mark_delete
     fields: Optional[Dict[str, OneCValue]] = None     # реквізити документа (формат як у query)
+    fields_search: Optional[Dict[str, Any]] = None    # іменовані набори для find-or-create (структуру знає 1С)
 
 class SaveDocResponse(BaseModel):
     ref: str

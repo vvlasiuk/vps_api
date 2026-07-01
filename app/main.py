@@ -15,6 +15,7 @@ import pika
 from .models import Context, ContextStatus, Token, MasterToken, MasterTokenStatus, User
 from .schemas import ContextCreate, ContextUpdate, ContextResponse, CommandRequest, CommandMasterRequest, TokenRequest, TokenResponse, UserCreate, UserResponse, UserUpdate, LoginRequest, LoginResponse, OneCQueryRequest, OneCQueryResponse, SaveDocRequest, SaveDocResponse 
 import os
+import time
 import datetime
 import json
 import secrets
@@ -85,6 +86,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Діагностика: повний час обробки кожного запиту ──
+# Пише в лог uvicorn і повертає в заголовку X-Process-Time (мс).
+@app.middleware("http")
+async def _timing_middleware(request: Request, call_next):
+    _t0 = time.time()
+    response = await call_next(request)
+    _ms = int((time.time() - _t0) * 1000)
+    response.headers["X-Process-Time"] = str(_ms)
+    # print(f"[timing] {request.method} {request.url.path} — {_ms} ms")
+    return response
 
 # --- Context endpoints ---
 @app.post("/context", response_model=ContextResponse)
@@ -523,11 +535,13 @@ def _check_session_token(token_str: str, db: Session) -> Token:
 # ── Спільний виклик методів запису 1С (save_doc / у майбутньому save_cat) ──
 def _call_onec_save(url: str, payload: dict) -> dict:
     payload = {**payload, "token": ONEC_TOKEN}
+    _t0 = time.time()
     try:
         response = httpx.post(url, json=payload, timeout=30)
     except httpx.RequestError as e:
         error_logger.log_error(f"1С недоступний: {e}", responsibility="vps_api")
         raise HTTPException(status_code=503, detail="1С сервіс недоступний")
+    print(f"[1c call] save {url} — {int((time.time()-_t0)*1000)} ms")
 
     if response.status_code == 401:
         raise HTTPException(status_code=502, detail="Помилка авторизації до 1С")
@@ -593,7 +607,9 @@ def onec_query(
     }
  
     try:
+        _t0 = time.time()
         response = httpx.post(ONEC_QUERY_URL, json=payload, timeout=30)
+        print(f"[1c call] query {ONEC_QUERY_URL} — {int((time.time()-_t0)*1000)} ms")
     except httpx.RequestError as e:
         error_logger.log_error(f"1С недоступний: {e}", responsibility="vps_api")
         raise HTTPException(status_code=503, detail="1С сервіс недоступний")
@@ -639,6 +655,10 @@ def onec_save_doc(
         "action":   req.action,
         "fields":   onec_fields,
     }
+
+    # Іменовані набори для find-or-create — прокидаємо як є, структуру знає 1С
+    if req.fields_search is not None:
+        payload["fields_search"] = req.fields_search
 
     return _call_onec_save(ONEC_SAVE_DOC_URL, payload)
 # --- GlobalMessageContext endpoints ---
@@ -720,4 +740,3 @@ def read_global_message_telegrams(
     if global_msg_id is not None:
         query = query.filter(models.GlobalMessageTelegram.global_msg_id == global_msg_id)
     return query.all()
-
