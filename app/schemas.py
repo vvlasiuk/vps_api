@@ -162,3 +162,26 @@ class SaveDocResponse(BaseModel):
     version: str
     posted: bool
     marked: bool    
+
+class MetadataDescribeRequest(BaseModel):
+    type: str                                          # "Справочник" | "Документ"
+    name: str                                          # ім'я об'єкта, напр. "Контрагенты"
+
+class MetadataQueriesRequest(BaseModel):
+    object_type: str                                   # "Справочник" | "Документ"
+    object_name: str                                   # ім'я об'єкта, напр. "Контрагенты"
+
+class SaveQueryRequest(BaseModel):
+    file_name: str = ""                                # ім'я файлу без розширення; "" → = meta.query_name
+    sel: str                                           # текст запиту (.sel)
+    meta: Dict[str, Any]                               # вміст .json (джерело правди: query_name, object_type, object_name, fields...)
+
+class QueryGetRequest(BaseModel):
+    query_name: str                                    # ідентифікатор запиту для читання сирих .sel/.json
+
+class GenerateQueryRequest(BaseModel):
+    object_type: str                                   # "Справочник" | "Документ"
+    object_name: str                                   # ім'я об'єкта, напр. "Контрагенты"
+    task: str = ""                                      # завдання для AI; "" → механічна болванка
+    current_sel: str = ""                              # поточний .sel у редакторі (AI редагує його, якщо є)
+    current_meta: Optional[Dict[str, Any]] = None      # поточний .json у редакторі (для редагування)

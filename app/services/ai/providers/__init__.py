@@ -1,0 +1,1 @@
+# providers — адаптери конкретних AI-сервісів (gemini, anthropic, ...).

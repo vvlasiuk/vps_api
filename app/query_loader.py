@@ -2,6 +2,7 @@
 # Сканує теку queries1c/, парує .sel (текст запиту) + .json (метадані).
 # Файли паруються за ІМЕНЕМ ФАЙЛУ (може бути кирилицею).
 # Запит РЕЄСТРУЄТЬСЯ за полем "query_name" з .json (трансліт/ASCII-ідентифікатор).
+# Прив'язка до об'єкта 1С — за полями "object_type" + "object_name" з .json.
 # Викликається один раз при старті.
 
 import os
@@ -80,6 +81,9 @@ def load_queries() -> dict:
                 "info":   meta.get("info", ""),
                 "fields": meta.get("fields", []),
                 "_file":  file_base,  # службове: з якого файлу завантажено (для діагностики)
+                "_path":  os.path.join(root, file_base),  # база шляху без розширення (для читання сирих файлів)
+                "_object_type": str(meta.get("object_type", "")).strip(),  # прив'язка до об'єкта 1С
+                "_object_name": str(meta.get("object_name", "")).strip(),
             }
 
     print(f"[query_loader] Завантажено запитів: {len(_queries)}")
@@ -94,3 +98,19 @@ def get_query(name: str) -> dict | None:
 def list_queries() -> dict:
     """Повертає всі завантажені запити (за query_name) — для AI-агента / документації."""
     return _queries
+
+
+def list_queries_for_object(object_type: str, object_name: str) -> list:
+    """Повертає запити, прив'язані до конкретного об'єкта 1С (за object_type + object_name з .json).
+    Використовується браузером метаданих для показу наявних запитів об'єкта."""
+    result = []
+    for query_name, cfg in _queries.items():
+        if cfg.get("_object_type") == object_type and cfg.get("_object_name") == object_name:
+            result.append({
+                "query_name": query_name,
+                "info":       cfg.get("info", ""),
+                "file":       cfg.get("_file", ""),
+                "fields_count": len(cfg.get("fields", [])),
+            })
+    result.sort(key=lambda q: q["query_name"])
+    return result
