@@ -16,7 +16,7 @@ import json as json_lib
 from fastapi import HTTPException
 
 from .. import query_loader
-from ..runtime import ONEC_METADATA_DESCRIBE_URL
+from ..runtime import ONEC_METADATA_DESCRIBE_URL, ONEC_SOURCE_NAME
 from .onec_service import call_onec_read
 
 # Тека з конфігами запитів (та сама, що сканує query_loader)
@@ -84,8 +84,9 @@ def _safe_segment(value: str, what: str) -> str:
     return v
 
 
-def save_query(file_name: str, sel: str, meta: dict) -> dict:
+def save_query(file_name: str, sel: str, meta: dict, username: str = "") -> dict:
     """Пише .sel + .json у теку об'єкта, перечитує loader.
+    Перед перезаписом наявного — тимчасова копія старих файлів у temp/<username>/.
     Повертає {ok, query_name, path_sel, path_json, total_queries}."""
 
     # ── Валідація вмісту .json (джерело правди) ──
@@ -128,6 +129,11 @@ def save_query(file_name: str, sel: str, meta: dict) -> dict:
     root_abs = os.path.abspath(QUERIES_DIR)
     if not os.path.abspath(target_dir).startswith(root_abs):
         raise HTTPException(status_code=400, detail="Шлях виходить за межі queries1c/")
+
+    # ── Тимчасова копія ПЕРЕД перезаписом (крок назад) ──
+    # Копіюємо старі версії лише якщо файли вже існують (перезапис, не створення).
+    from .backup_service import backup_temp_files
+    backup_temp_files([sel_path, json_path], username)
 
     # ── Запис (тека створюється, наявне перезаписується) ──
     try:
@@ -186,6 +192,26 @@ def read_query(query_name: str) -> dict:
         "sel":        sel_raw,
         "meta":       meta_raw,
     }
+
+
+def _applicable_system_fields(object_type: str, describe: dict) -> list:
+    """Системні поля, доречні для конкретного об'єкта: включає поле, лише якщо його
+    covers-реквізити реально існують (Родитель/ЭтоГруппа є ТІЛЬКИ в ієрархічних довідниках).
+    Реквізити, що існують завжди (Ссылка/Код/... /Проведен/ВерсияДанных/Номер/Дата),
+    вважаються наявними без перевірки describe."""
+    present = set()
+    for a in (describe.get("attributes", []) or []):
+        nm = a.get("name", "")
+        if nm:
+            present.add(nm)
+    ALWAYS = {"Ссылка", "Код", "Наименование", "ПометкаУдаления",
+              "Проведен", "ВерсияДанных", "Номер", "Дата"}
+    result = []
+    for sf in SYSTEM_FIELDS.get(object_type, []):
+        covers = sf.get("covers", [])
+        if all((c in ALWAYS) or (c in present) for c in covers):
+            result.append(sf)
+    return result
 
 
 def _map_attr_type(types: list) -> tuple:
@@ -253,9 +279,10 @@ def generate_query(object_type: str, object_name: str, task: str = "",
     # Короткий псевдонім таблиці (док/дов)
     alias = TABLE_ALIAS.get(object_type, "т")
 
-    # Системні поля за типом об'єкта
-    sys_fields = SYSTEM_FIELDS.get(object_type, [])
-    # Множина стандартних реквізитів, які покривають системні поля (щоб не дублювати нижче)
+    # Системні поля, доречні саме для цього об'єкта (без ієрархічних для лінійних довідників)
+    sys_fields = _applicable_system_fields(object_type, describe)
+
+    # Множина стандартних реквізитів, покритих ДОДАНИМИ системними (щоб не дублювати нижче)
     covered = set()
     for sf in sys_fields:
         for c in sf.get("covers", []):
@@ -299,6 +326,7 @@ def generate_query(object_type: str, object_name: str, task: str = "",
         "query_name": "",
         "object_type": object_type,
         "object_name": object_name,
+        "source_name": ONEC_SOURCE_NAME,
         "info": synonym,
         "fields": fields,
     }
@@ -313,11 +341,11 @@ def _generate_query_ai(describe: dict, task: str, current_sel: str = "", current
     from .ai import get_ai
     from .ai.prompts.query_gen import SYSTEM_PROMPT, build_user_prompt
 
-    # Системні поля за типом об'єкта — передаємо в промпт, щоб AI їх завжди включав
+    # Системні поля, доречні для цього об'єкта (ієрархічні — лише коли є Родитель/ЭтоГруппа)
     obj_type = describe.get("type", "")
     alias = TABLE_ALIAS.get(obj_type, "т")
     sys_fields = []
-    for sf in SYSTEM_FIELDS.get(obj_type, []):
+    for sf in _applicable_system_fields(obj_type, describe):
         sys_fields.append({
             "key": sf["key"],
             "expr": sf["expr"].replace("{a}", alias),
@@ -343,6 +371,8 @@ def _generate_query_ai(describe: dict, task: str, current_sel: str = "", current
     # object_type/object_name — джерело правди з describe (не довіряємо AI у прив'язці)
     meta["object_type"] = describe.get("type", "")
     meta["object_name"] = describe.get("name", "")
+    # source_name — з конфігу джерела (не від AI)
+    meta["source_name"] = ONEC_SOURCE_NAME
     # query_name лишаємо як запропонував AI (людина перевірить у редакторі)
 
     return {"sel": sel, "meta": meta}

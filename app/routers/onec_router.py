@@ -16,6 +16,7 @@ from ..runtime import (
     error_logger,
 )
 from ..schemas import (
+    BackupCreateRequest,
     GenerateQueryRequest,
     MetadataDescribeRequest,
     MetadataQueriesRequest,
@@ -28,6 +29,7 @@ from ..schemas import (
 )
 from ..services.onec_service import call_onec_read, call_onec_save
 from ..services.query_writer import generate_query, read_query, save_query
+from ..services.backup_service import create_backup
 
 router = APIRouter()
 
@@ -150,10 +152,17 @@ def metadata_queries(
 @router.post("/metadata/save_query")
 def metadata_save_query(
     req: SaveQueryRequest,
-    _session_token=Depends(require_session_token),
+    token=Depends(require_session_token),
+    db: Session = Depends(get_db),
 ):
-    """Запис .sel/.json запиту + гарячий перечит loader."""
-    return save_query(req.file_name, req.sel, req.meta)
+    """Запис .sel/.json запиту + гарячий перечит loader.
+    Автор (для тимчасової копії перед перезаписом) — з токена сесії."""
+    username = "unknown"
+    if token.user_id:
+        user = db.query(User).filter(User.id == token.user_id).first()
+        if user and user.username:
+            username = user.username
+    return save_query(req.file_name, req.sel, req.meta, username=username)
 
 
 @router.post("/metadata/query_get")
@@ -176,3 +185,18 @@ def metadata_generate_query(
         req.object_type, req.object_name, req.task,
         current_sel=req.current_sel, current_meta=req.current_meta,
     )
+
+
+@router.post("/backups/create")
+def backups_create(
+    req: BackupCreateRequest,
+    token=Depends(require_session_token),
+    db: Session = Depends(get_db),
+):
+    """Створити zip-бекап набору тек за псевдонімом. Автор — з токена сесії."""
+    username = "unknown"
+    if token.user_id:
+        user = db.query(User).filter(User.id == token.user_id).first()
+        if user and user.username:
+            username = user.username
+    return create_backup(req.set_name, username)

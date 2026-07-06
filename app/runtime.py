@@ -5,6 +5,7 @@ import pika
 from .error_logger import ErrorLogger
 
 ONEC_BASE_URL = os.getenv("ONEC_BASE_URL")
+ONEC_SOURCE_NAME = os.getenv("ONEC_SOURCE_NAME", "1C_UTP")
 ONEC_QUERY_URL = f"{ONEC_BASE_URL}/query"
 ONEC_SAVE_DOC_URL = f"{ONEC_BASE_URL}/save_doc"
 ONEC_SAVE_CAT_URL = f"{ONEC_BASE_URL}/save_cat"

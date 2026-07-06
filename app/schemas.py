@@ -185,3 +185,6 @@ class GenerateQueryRequest(BaseModel):
     task: str = ""                                      # завдання для AI; "" → механічна болванка
     current_sel: str = ""                              # поточний .sel у редакторі (AI редагує його, якщо є)
     current_meta: Optional[Dict[str, Any]] = None      # поточний .json у редакторі (для редагування)
+
+class BackupCreateRequest(BaseModel):
+    set_name: str                                      # псевдонім набору бекапу (напр. "full_html")
