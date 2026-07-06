@@ -188,3 +188,10 @@ class GenerateQueryRequest(BaseModel):
 
 class BackupCreateRequest(BaseModel):
     set_name: str                                      # псевдонім набору бекапу (напр. "full_html")
+
+class FormReadRequest(BaseModel):
+    path: str                                          # відносний шлях у html/, напр. "pages/admin/x.html"
+
+class FormWriteRequest(BaseModel):
+    path: str                                          # шлях у html/ (запис дозволено лише в pages/, menu/)
+    content: str                                       # повний вміст файлу

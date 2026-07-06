@@ -127,7 +127,8 @@ def save_query(file_name: str, sel: str, meta: dict, username: str = "") -> dict
 
     # Додатковий захист: підсумковий шлях має лишатися всередині QUERIES_DIR
     root_abs = os.path.abspath(QUERIES_DIR)
-    if not os.path.abspath(target_dir).startswith(root_abs):
+    target_abs = os.path.abspath(target_dir)
+    if target_abs != root_abs and not target_abs.startswith(root_abs + os.sep):
         raise HTTPException(status_code=400, detail="Шлях виходить за межі queries1c/")
 
     # ── Тимчасова копія ПЕРЕД перезаписом (крок назад) ──

@@ -17,6 +17,8 @@ from ..runtime import (
 )
 from ..schemas import (
     BackupCreateRequest,
+    FormReadRequest,
+    FormWriteRequest,
     GenerateQueryRequest,
     MetadataDescribeRequest,
     MetadataQueriesRequest,
@@ -30,6 +32,7 @@ from ..schemas import (
 from ..services.onec_service import call_onec_read, call_onec_save
 from ..services.query_writer import generate_query, read_query, save_query
 from ..services.backup_service import create_backup
+from ..services.forms_service import list_forms, read_form, write_form
 
 router = APIRouter()
 
@@ -200,3 +203,35 @@ def backups_create(
         if user and user.username:
             username = user.username
     return create_backup(req.set_name, username)
+
+
+@router.post("/forms/list")
+def forms_list(
+    _session_token=Depends(require_session_token),
+):
+    """Перелік файлів html/ (.html/.css/.js) з ознакою writable."""
+    return list_forms()
+
+
+@router.post("/forms/read")
+def forms_read(
+    req: FormReadRequest,
+    _session_token=Depends(require_session_token),
+):
+    """Вміст файлу з html/ (читання дозволене по всій html/)."""
+    return read_form(req.path)
+
+
+@router.post("/forms/write")
+def forms_write(
+    req: FormWriteRequest,
+    token=Depends(require_session_token),
+    db: Session = Depends(get_db),
+):
+    """Запис файлу (лише pages/, menu/) + тимчасова копія перед перезаписом."""
+    username = "unknown"
+    if token.user_id:
+        user = db.query(User).filter(User.id == token.user_id).first()
+        if user and user.username:
+            username = user.username
+    return write_form(req.path, req.content, username=username)
