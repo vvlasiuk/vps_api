@@ -84,6 +84,7 @@ def load_queries() -> dict:
                 "_path":  os.path.join(root, file_base),  # база шляху без розширення (для читання сирих файлів)
                 "_object_type": str(meta.get("object_type", "")).strip(),  # прив'язка до об'єкта 1С
                 "_object_name": str(meta.get("object_name", "")).strip(),
+                "_mcp_allowed": bool(meta.get("mcp_allowed", False)),  # доступ через MCP-канал (deny by default)
             }
 
     print(f"[query_loader] Завантажено запитів: {len(_queries)}")
@@ -111,6 +112,7 @@ def list_queries_for_object(object_type: str, object_name: str) -> list:
                 "info":       cfg.get("info", ""),
                 "file":       cfg.get("_file", ""),
                 "fields_count": len(cfg.get("fields", [])),
+                "mcp_allowed": cfg.get("_mcp_allowed", False),  # чи доступний через MCP-канал
             })
     result.sort(key=lambda q: q["query_name"])
     return result

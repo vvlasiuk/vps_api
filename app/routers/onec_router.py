@@ -46,6 +46,14 @@ def onec_query(
     if not cfg:
         raise HTTPException(status_code=404, detail=f"Запит '{req.query}' не знайдено")
 
+    # MCP-канал: додаткове звуження поверх майбутніх ролей. Deny by default —
+    # через MCP доступні лише запити з mcp_allowed:true у .json.
+    if req.mcp and not cfg.get("_mcp_allowed", False):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Запит '{req.query}' недоступний через MCP-канал (mcp_allowed не встановлено)",
+        )
+
     inner_query = cfg["query"]
     fields_sql = ", ".join(req.fields) if req.fields else "*"
 

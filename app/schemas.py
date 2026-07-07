@@ -140,6 +140,7 @@ class OneCQueryRequest(BaseModel):
     order:   Optional[str] = None                 # сортування по аліасах, напр. "name"
     offset:  int = 0
     limit:   int = 100
+    mcp:     bool = False                          # ознака MCP-каналу (фронт не передає). True → перевірка mcp_allowed
 
 class OneCQueryResponse(BaseModel):
     total: int
