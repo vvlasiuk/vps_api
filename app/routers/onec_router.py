@@ -17,6 +17,7 @@ from ..runtime import (
 )
 from ..schemas import (
     BackupCreateRequest,
+    CommandLogRequest,
     FormReadRequest,
     FormWriteRequest,
     GenerateQueryRequest,
@@ -33,6 +34,7 @@ from ..services.onec_service import call_onec_read, call_onec_save
 from ..services.query_writer import generate_query, read_query, save_query
 from ..services.backup_service import create_backup
 from ..services.forms_service import list_forms, read_form, write_form
+from ..services.command_log_service import log_command
 
 router = APIRouter()
 
@@ -243,3 +245,26 @@ def forms_write(
         if user and user.username:
             username = user.username
     return write_form(req.path, req.content, username=username)
+
+
+@router.post("/command_log")
+def command_log(
+    req: CommandLogRequest,
+    token=Depends(require_session_token),
+    db: Session = Depends(get_db),
+):
+    """Створити файл журналу команди користувача.
+    Автор — з токена сесії; час — серверний. cmd/desc обов'язкові (інакше 400)."""
+    username = "unknown"
+    if token.user_id:
+        user = db.query(User).filter(User.id == token.user_id).first()
+        if user and user.username:
+            username = user.username
+    return log_command(
+        cmd=req.cmd,
+        desc=req.desc,
+        username=username,
+        clar=req.clar,
+        why=req.why,
+        files=req.files,
+    )

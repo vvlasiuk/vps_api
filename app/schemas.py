@@ -196,3 +196,10 @@ class FormReadRequest(BaseModel):
 class FormWriteRequest(BaseModel):
     path: str                                          # шлях у html/ (запис дозволено лише в pages/, menu/)
     content: str                                       # повний вміст файлу
+
+class CommandLogRequest(BaseModel):
+    cmd:   str                                  # суть команди користувача (укр.), обов'язкове
+    desc:  str                                  # короткий ASCII для імені файлу, обов'язкове
+    clar:  str = ""                             # уточнення з діалогу
+    why:   str = ""                             # мотив, якщо був
+    files: Optional[list[str]] = None           # зачеплені артефакти (шляхи від кореня проекту)

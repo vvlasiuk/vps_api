@@ -23,7 +23,7 @@ BACKUP_TEMP_DAYS = int(os.getenv("BACKUP_TEMP_DAYS", "7"))
 
 # Реєстр наборів: псевдонім → перелік тек (відносно кореня проекту)
 BACKUP_SETS = {
-    "full_html": ["queries1c", "html"],
+    "full_html": ["queries1c", "html", "html_command_log"],
 }
 
 
