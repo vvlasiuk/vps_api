@@ -12,6 +12,7 @@ ONEC_SAVE_CAT_URL = f"{ONEC_BASE_URL}/save_cat"
 ONEC_METADATA_OBJECTS_URL = f"{ONEC_BASE_URL}/metadata_objects"
 ONEC_METADATA_DESCRIBE_URL = f"{ONEC_BASE_URL}/metadata_describe"
 ONEC_TOKEN = os.getenv("ONEC_TOKEN", "")
+ONEC_PHOTOS_DIR = os.getenv("ONEC_PHOTOS_DIR", "")
 
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))

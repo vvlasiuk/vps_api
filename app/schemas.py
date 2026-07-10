@@ -203,3 +203,12 @@ class CommandLogRequest(BaseModel):
     clar:  str = ""                             # уточнення з діалогу
     why:   str = ""                             # мотив, якщо був
     files: Optional[list[str]] = None           # зачеплені артефакти (шляхи від кореня проекту)
+
+class PhotoListRequest(BaseModel):
+    object_type: str                            # повний тип 1С: "Документ.X" | "Справочник.Y"
+    ref: str
+
+class PhotoDeleteRequest(BaseModel):
+    object_type: str                            # повний тип 1С: "Документ.X" | "Справочник.Y"
+    ref: str
+    name: str

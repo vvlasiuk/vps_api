@@ -1,7 +1,8 @@
 import time
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .. import query_loader
@@ -25,6 +26,8 @@ from ..schemas import (
     MetadataQueriesRequest,
     OneCQueryRequest,
     OneCQueryResponse,
+    PhotoDeleteRequest,
+    PhotoListRequest,
     QueryGetRequest,
     SaveDocRequest,
     SaveDocResponse,
@@ -35,6 +38,7 @@ from ..services.query_writer import generate_query, read_query, save_query
 from ..services.backup_service import create_backup
 from ..services.forms_service import list_forms, read_form, write_form
 from ..services.command_log_service import log_command
+from ..services.photos_service import save_photos, list_photos, read_photo, delete_photo
 
 router = APIRouter()
 
@@ -134,6 +138,53 @@ def onec_save_doc(
         payload["fields_search"] = req.fields_search
 
     return call_onec_save(ONEC_SAVE_DOC_URL, payload)
+
+
+# ─── ФОТО ОБʼЄКТІВ (документів і довідників) ─────────────────
+# Файли на диску: {ONEC_PHOTOS_DIR}/{Документи|Довідники}/{назва}/{ref}/NNNN.ext.
+# object_type — повний тип посилання 1С ("Документ.X" / "Справочник.Y").
+# Віддача (file) — варіант «а»: фронт тягне з авторизацією → blob.
+
+
+@router.post("/docs/photos/upload")
+def docs_photos_upload(
+    object_type: str = Form(...),
+    ref: str = Form(...),
+    files: list[UploadFile] = File(...),
+    _session_token=Depends(require_session_token),
+):
+    """Заливка фото обʼєкта (multipart) у {ONEC_PHOTOS_DIR}/{вид}/{назва}/{ref}/."""
+    return save_photos(object_type, ref, files)
+
+
+@router.post("/docs/photos/list")
+def docs_photos_list(
+    req: PhotoListRequest,
+    _session_token=Depends(require_session_token),
+):
+    """Список фото обʼєкта."""
+    return list_photos(req.object_type, req.ref)
+
+
+@router.get("/docs/photos/file")
+def docs_photos_file(
+    object_type: str,
+    ref: str,
+    name: str,
+    _session_token=Depends(require_session_token),
+):
+    """Віддача одного фото обʼєкта."""
+    full, media = read_photo(object_type, ref, name)
+    return FileResponse(full, media_type=media)
+
+
+@router.post("/docs/photos/delete")
+def docs_photos_delete(
+    req: PhotoDeleteRequest,
+    _session_token=Depends(require_session_token),
+):
+    """Видалення одного фото обʼєкта."""
+    return delete_photo(req.object_type, req.ref, req.name)
 
 
 @router.post("/1c/metadata_objects")
