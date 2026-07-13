@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from . import models, query_loader
 from .database import engine
 from .routers import (
+    cf_module_router,
     context_router,
     global_messages_router,
     onec_router,
@@ -47,3 +48,4 @@ app.include_router(token_router.router)
 app.include_router(users_router.router)
 app.include_router(onec_router.router)
 app.include_router(global_messages_router.router)
+app.include_router(cf_module_router.router)
