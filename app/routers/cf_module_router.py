@@ -123,3 +123,28 @@ def ctx_object_modules(
         raise HTTPException(
             status_code=400, detail=f"Невідомий тип об'єкта: {type}")
     return {"type": type, "name": name, "modules": mods}
+
+@router.get("/find")
+def ctx_find(
+    query: str = Query(..., min_length=2, description="ім'я/текст для пошуку використань"),
+    match: str = Query("word", pattern="^(word|contains|prefix)$",
+                       description="word=по межах слова, contains=будь-де, prefix=з початку"),
+    type: str | None = Query(None, description="тип об'єкта 1С для звуження, напр. Справочник"),
+    name: str | None = Query(None, description="ім'я об'єкта (разом із type)"),
+    path_prefix: str | None = Query(None, description="префікс module_path (альтернатива type+name)"),
+    role: str | None = Query(None, description="фільтр за роллю модуля"),
+    max_modules: int = Query(200, ge=1, le=2000),
+    max_per_module: int = Query(20, ge=1, le=500),
+    context_lines: int = Query(0, ge=0, le=5, description="± рядків контексту навколо збігу"),
+    _session_token=Depends(require_session_token),
+):
+    """Знайти всі використання імені/тексту в коді (тіла процедур + рівень модуля)."""
+    _guard()
+    try:
+        return _reader.find_usages(
+            query, match=match, type_1c=type, type_name=name,
+            path_prefix=path_prefix, role=role,
+            max_modules=max_modules, max_per_module=max_per_module,
+            context_lines=context_lines)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
