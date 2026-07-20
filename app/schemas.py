@@ -212,3 +212,20 @@ class PhotoDeleteRequest(BaseModel):
     object_type: str                            # повний тип 1С: "Документ.X" | "Справочник.Y"
     ref: str
     name: str
+
+class SaveCatRequest(BaseModel):
+    catalog: str                                       # ім'я довідника, напр. "Контрагенты"
+    ref: str = ""                                      # "" → створення, guid → редагування
+    version: str = ""                                  # ВерсияДанных для перевірки актуальності
+    action: str = "write"                              # write | mark_delete | unmark_delete
+    is_folder: bool = False                            # True → створюємо групу (ЭтоГруппа), а не елемент
+    fields: Optional[Dict[str, OneCValue]] = None      # реквізити елемента (формат як у query)
+    fields_search: Optional[Dict[str, Any]] = None     # іменовані набори для find-or-create (структуру знає 1С)
+
+class SaveCatResponse(BaseModel):
+    ref: str
+    code: str = ""                                     # Код
+    description: str = ""                              # Наименование
+    version: str
+    is_folder: bool = False
+    marked: bool    

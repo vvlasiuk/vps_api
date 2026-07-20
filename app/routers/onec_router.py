@@ -12,6 +12,7 @@ from ..runtime import (
     ONEC_METADATA_DESCRIBE_URL,
     ONEC_METADATA_OBJECTS_URL,
     ONEC_QUERY_URL,
+    ONEC_SAVE_CAT_URL,
     ONEC_SAVE_DOC_URL,
     ONEC_TOKEN,
     error_logger,
@@ -29,6 +30,8 @@ from ..schemas import (
     PhotoDeleteRequest,
     PhotoListRequest,
     QueryGetRequest,
+    SaveCatRequest,
+    SaveCatResponse,
     SaveDocRequest,
     SaveDocResponse,
     SaveQueryRequest,
@@ -138,6 +141,35 @@ def onec_save_doc(
         payload["fields_search"] = req.fields_search
 
     return call_onec_save(ONEC_SAVE_DOC_URL, payload)
+
+
+@router.post("/1c/save_cat", response_model=SaveCatResponse)
+def onec_save_cat(
+    req: SaveCatRequest,
+    _session_token=Depends(require_session_token),
+):
+    # Дзеркало save_doc для довідників:
+    #   • немає date і проведення (post/unpost);
+    #   • is_folder розрізняє групу та елемент на боці 1С;
+    #   • Ответственный НЕ інжектуємо (більшість довідників не мають реквізиту).
+    onec_fields = {}
+    if req.fields:
+        for key, p in req.fields.items():
+            onec_fields[key] = {"type": p.type, "value": p.value}
+
+    payload = {
+        "catalog": req.catalog,
+        "ref": req.ref,
+        "version": req.version,
+        "action": req.action,
+        "is_folder": req.is_folder,
+        "fields": onec_fields,
+    }
+
+    if req.fields_search is not None:
+        payload["fields_search"] = req.fields_search
+
+    return call_onec_save(ONEC_SAVE_CAT_URL, payload)
 
 
 # ─── ФОТО ОБʼЄКТІВ (документів і довідників) ─────────────────
