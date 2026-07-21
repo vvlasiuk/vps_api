@@ -1,3 +1,4 @@
+import re
 import time
 
 import httpx
@@ -45,6 +46,12 @@ from ..services.photos_service import save_photos, list_photos, read_photo, dele
 
 router = APIRouter()
 
+# Ім'я службової тимчасової таблиці-результату. Якщо .sel готує дані в неї
+# (ПОМЕСТИТЬ ТТ_РЕЗУЛЬТАТЗАПИТУ_), запит виконується в пакетному режимі:
+# проєкція/відбір/сортування навішуються окремим фінальним пакетом ИЗ цієї ТТ.
+_RESULT_TT = "ТТ_РЕЗУЛЬТАТЗАПИТУ_"
+_RESULT_TT_RE = re.compile(r"ПОМЕСТИТЬ\s+ТТ_РЕЗУЛЬТАТЗАПИТУ_", re.IGNORECASE)
+
 
 @router.post("/1c/query", response_model=OneCQueryResponse)
 def onec_query(
@@ -66,7 +73,21 @@ def onec_query(
     inner_query = cfg["query"]
     fields_sql = ", ".join(req.fields) if req.fields else "*"
 
-    wrapped = f"ВЫБРАТЬ {fields_sql}\nИЗ (\n{inner_query}\n) КАК Вложенный"
+    # Два режими виконання, обидва через ту саму проєкцію/відбір/сортування:
+    #   • Пакетний (temp-таблиці): якщо .sel готує ПОМЕСТИТЬ ТТ_РЕЗУЛЬТАТЗАПИТУ_,
+    #     доклеюємо фінальний пакет ВЫБРАТЬ ... ИЗ ТТ_РЕЗУЛЬТАТЗАПИТУ_.
+    #     Обгортати ИЗ(...) не можна — 1С не дозволяє кілька пакетів (;) у підзапиті.
+    #   • Звичайний (один ВЫБРАТЬ): як раніше — ИЗ (текст) КАК Вложенный.
+    # Умова контракту: у пакетному режимі імена колонок ТТ_РЕЗУЛЬТАТЗАПИТУ_ = публічні
+    # імена виходу (fields/filters/order посилаються саме на них).
+    if _RESULT_TT_RE.search(inner_query):
+        # Роутер сам ставить рівно один роздільник перед фінальним пакетом,
+        # тож знімаємо можливий хвостовий(і) ; та пробіли з .sel
+        # (подвійний ; = порожній пакет = синтаксична помилка 1С).
+        body = re.sub(r"[\s;]+$", "", inner_query)
+        wrapped = f"{body}\n;\nВЫБРАТЬ {fields_sql}\nИЗ {_RESULT_TT}"
+    else:
+        wrapped = f"ВЫБРАТЬ {fields_sql}\nИЗ (\n{inner_query}\n) КАК Вложенный"
 
     if req.filters:
         wrapped += f"\nГДЕ {req.filters}"
