@@ -155,6 +155,7 @@ class SaveDocRequest(BaseModel):
     action: str = "write"                              # write | post | unpost | mark_delete
     fields: Optional[Dict[str, OneCValue]] = None     # реквізити документа (формат як у query)
     fields_search: Optional[Dict[str, Any]] = None    # іменовані набори для find-or-create (структуру знає 1С)
+    tabular_sections: Optional[Dict[str, list[Dict[str, OneCValue]]]] = None  # {ІмяТЧ: [ {реквізит: OneCValue}, ... ]}    
 
 class SaveDocResponse(BaseModel):
     ref: str
@@ -221,7 +222,8 @@ class SaveCatRequest(BaseModel):
     is_folder: bool = False                            # True → створюємо групу (ЭтоГруппа), а не елемент
     fields: Optional[Dict[str, OneCValue]] = None      # реквізити елемента (формат як у query)
     fields_search: Optional[Dict[str, Any]] = None     # іменовані набори для find-or-create (структуру знає 1С)
-
+    tabular_sections: Optional[Dict[str, list[Dict[str, OneCValue]]]] = None  # {ІмяТЧ: [ {реквізит: OneCValue}, ... ]}
+    
 class SaveCatResponse(BaseModel):
     ref: str
     code: str = ""                                     # Код

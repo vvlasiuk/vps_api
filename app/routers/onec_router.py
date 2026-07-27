@@ -53,6 +53,22 @@ _RESULT_TT = "ТТ_РЕЗУЛЬТАТЗАПИТУ_"
 _RESULT_TT_RE = re.compile(r"ПОМЕСТИТЬ\s+ТТ_РЕЗУЛЬТАТЗАПИТУ_", re.IGNORECASE)
 
 
+def _convert_tabular_sections(tabular_sections):
+    """Конвертує tabular_sections із запиту (Dict[str, list[Dict[str, OneCValue]]])
+    у формат, який очікує 1С: {ІмяТЧ: [ {Реквізит: {type, value}}, ... ], ...}.
+    Дзеркалить логіку конвертації fields, застосовану по кожному рядку кожної ТЧ."""
+    onec_tabular_sections = {}
+    for ts_name, rows in tabular_sections.items():
+        onec_rows = []
+        for row in rows:
+            onec_row = {}
+            for key, p in row.items():
+                onec_row[key] = {"type": p.type, "value": p.value}
+            onec_rows.append(onec_row)
+        onec_tabular_sections[ts_name] = onec_rows
+    return onec_tabular_sections
+
+
 @router.post("/1c/query", response_model=OneCQueryResponse)
 def onec_query(
     req: OneCQueryRequest,
@@ -161,6 +177,9 @@ def onec_save_doc(
     if req.fields_search is not None:
         payload["fields_search"] = req.fields_search
 
+    if req.tabular_sections is not None:
+        payload["tabular_sections"] = _convert_tabular_sections(req.tabular_sections)
+
     return call_onec_save(ONEC_SAVE_DOC_URL, payload)
 
 
@@ -189,6 +208,9 @@ def onec_save_cat(
 
     if req.fields_search is not None:
         payload["fields_search"] = req.fields_search
+
+    if req.tabular_sections is not None:
+        payload["tabular_sections"] = _convert_tabular_sections(req.tabular_sections)
 
     return call_onec_save(ONEC_SAVE_CAT_URL, payload)
 
