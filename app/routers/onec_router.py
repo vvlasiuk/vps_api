@@ -10,6 +10,7 @@ from .. import query_loader
 from ..dependencies import get_db, require_session_token
 from ..models import User
 from ..runtime import (
+    ONEC_ACTION_URL,
     ONEC_METADATA_DESCRIBE_URL,
     ONEC_METADATA_OBJECTS_URL,
     ONEC_QUERY_URL,
@@ -19,6 +20,7 @@ from ..runtime import (
     error_logger,
 )
 from ..schemas import (
+    ActionRequest,
     BackupCreateRequest,
     CommandLogRequest,
     FormReadRequest,
@@ -220,6 +222,38 @@ def onec_save_cat(
     payload = apply_create_autofill(payload)
 
     return call_onec_save(ONEC_SAVE_CAT_URL, payload)
+
+
+@router.post("/1c/action")
+def onec_action(
+    req: ActionRequest,
+    _session_token=Depends(require_session_token),
+):
+    payload = {
+        "token": ONEC_TOKEN,
+        "action": req.action,
+        "data": req.data,
+    }
+
+    try:
+        t0 = time.time()
+        response = httpx.post(ONEC_ACTION_URL, json=payload, timeout=60)
+        print(f"[1c call] action={req.action} {ONEC_ACTION_URL} - {int((time.time() - t0) * 1000)} ms")
+    except httpx.RequestError as exc:
+        error_logger.log_error(f"1С недоступний: {exc}", responsibility="vps_api")
+        raise HTTPException(status_code=503, detail="1С сервіс недоступний")
+
+    if response.status_code == 401:
+        raise HTTPException(status_code=502, detail="Помилка авторизації до 1С")
+
+    if response.status_code != 200:
+        try:
+            data = response.json()
+        except Exception:
+            data = {"error": f"1С повернула HTTP {response.status_code}"}
+        raise HTTPException(status_code=502, detail=data.get("error", "Помилка 1С"))
+
+    return response.json()
 
 
 # ─── ФОТО ОБʼЄКТІВ (документів і довідників) ─────────────────

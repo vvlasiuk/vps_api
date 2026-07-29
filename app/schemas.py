@@ -231,3 +231,7 @@ class SaveCatResponse(BaseModel):
     version: str
     is_folder: bool = False
     marked: bool    
+
+class ActionRequest(BaseModel):
+    action: str
+    data: Optional[Dict[str, Any]] = None
