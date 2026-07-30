@@ -71,7 +71,7 @@ HTML (компонент) → FastAPI (/1c/query, /1c/save_doc) → 1С HTTP-с�
 Типи полів (fields[].type) — СУВОРО одне з: ref, string, number, date, boolean.
   посилання (СправочникСсылка/ДокументСсылка/...) → ref
   Строка → string, Число → number, Дата → date, Булево → boolean
-  
+
 ### Перелічення (Перечисление) — окремий випадок серед ref-полів
 
 Перелічення технічно теж `kind: "ref"` у метаданих 1С (describe_object показує
@@ -193,6 +193,17 @@ HTML (компонент) → FastAPI (/1c/query, /1c/save_doc) → 1С HTTP-с�
 - list_view.js (ListView) — універсальний список (таблиця/картки). Дані через /1c/query.
   Конфіг: container, query, columns[{key,label,sortable,width,align}], search{fields,...},
   pageSize, defaultOrder, onRowClick. CSS: list_view.css (класи lv-).
+- confirm_modal.js (showConfirm, showAlert) — універсальні модалки замість нативних
+  confirm()/alert(). Підключати одразу після auth.js:
+  <script src="/html/components/confirm_modal.js"></script>
+  Не пише в DOM/CSS сам по собі, поки не викликаний — інжектить стилі й розмітку
+  при першому виклику (як doc_header.js).
+    - showConfirm({title, text, confirmLabel, danger}) → Promise<boolean> —
+      питання з двома кнопками (Скасувати / Підтвердити).
+    - showAlert({title, text, okLabel, danger}) → Promise<void> —
+      повідомлення з однією кнопкою (заміна alert()).
+  ПРАВИЛО: на сторінках (html/pages/) заборонено використовувати нативні
+  confirm()/alert() — лише showConfirm/showAlert з цього компонента.
 
 ## Фронтенд — глобали
 
@@ -259,3 +270,5 @@ HTML (компонент) → FastAPI (/1c/query, /1c/save_doc) → 1С HTTP-с�
 - Не пиши секрети у файли html/ (вони читаються через API).
 - 1С через MCP: query (читання даних через /1c/query) — дозволено вільно. save_cat, save_doc, describe_object — дають технічну можливість читати й ЗАПИСУВАТИ реальні бізнес-дані 1С (елементи довідників, документи), а не лише html/запити. Claude НЕ використовує ці три інструменти самостійно — ні для запису, ні для тестового читання/перевірки контракту — без прямої вказівки користувача на кожну таку дію в поточному повідомленні. Одноразовий дозвіл не переноситься на наступні кроки чи наступні сесії.
 - mcp_allowed у метаданих запиту — свідоме обмеження доступу з боку користувача. Claude НЕ встановлює/змінює це поле самостійно (через save_query), навіть маючи технічну можливість — лише за прямою вказівкою користувача.
+- Нативні alert()/confirm()/prompt() у сторінках не використовуються — лише
+  showConfirm/showAlert з components/confirm_modal.js.
