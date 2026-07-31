@@ -42,7 +42,7 @@ from ..schemas import (
 from ..services.onec_service import call_onec_read, call_onec_save
 from ..services.query_writer import generate_query, read_query, save_query
 from ..services.backup_service import create_backup
-from ..services.forms_service import list_forms, read_form, write_form
+from ..services.forms_service import list_forms, read_form, write_form, get_form_version
 from ..services.command_log_service import log_command
 from ..services.photos_service import save_photos, list_photos, read_photo, delete_photo
 from .onec_autofill import apply_create_autofill
@@ -398,6 +398,13 @@ def forms_read(
     """Вміст файлу з html/ (читання дозволене по всій html/)."""
     return read_form(req.path)
 
+@router.get("/forms/version")
+def forms_version(
+    path: str,
+    _session_token=Depends(require_session_token),
+):
+    """Легкий ендпойнт: лише версія сторінки (без передачі всього HTML)."""
+    return get_form_version(path)
 
 @router.post("/forms/write")
 def forms_write(
