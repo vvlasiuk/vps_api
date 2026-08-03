@@ -7,7 +7,6 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .. import query_loader
-from ..dependencies import get_db, require_session_token
 from ..models import User
 from ..runtime import (
     ONEC_ACTION_URL,
@@ -46,6 +45,7 @@ from ..services.forms_service import list_forms, read_form, write_form, get_form
 from ..services.command_log_service import log_command
 from ..services.photos_service import save_photos, list_photos, read_photo, delete_photo
 from .onec_autofill import apply_create_autofill
+from ..dependencies import get_db, require_session_token, require_session_token_readonly
 
 router = APIRouter()
 
@@ -75,7 +75,8 @@ def _convert_tabular_sections(tabular_sections):
 @router.post("/1c/query", response_model=OneCQueryResponse)
 def onec_query(
     req: OneCQueryRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
+
 ):
     cfg = query_loader.get_query(req.query)
     if not cfg:
