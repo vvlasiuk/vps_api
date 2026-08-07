@@ -75,6 +75,7 @@ class UserResponse(BaseModel):
     created_at: Optional[datetime] = None
     username: Optional[str] = None
     is_active: bool
+    last_login: Optional[datetime] = None
 
 class UserUpdate(BaseModel):
     lastname: Optional[str] = None

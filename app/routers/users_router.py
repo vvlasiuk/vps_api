@@ -2,6 +2,7 @@ import datetime
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db, require_master_token
@@ -124,6 +125,14 @@ def get_users(
     db: Session = Depends(get_db),
 ):
     users = db.query(User).order_by(User.lastname).all()
+
+    last_logins = dict(
+        db.query(Token.user_id, func.max(Token.created_at))
+        .filter(Token.user_id.isnot(None))
+        .group_by(Token.user_id)
+        .all()
+    )
+
     return [
         UserResponse(
             id=u.id,
@@ -139,7 +148,7 @@ def get_users(
             role=u.role,
             username=u.username,
             is_active=u.is_active,
-            created_at=u.created_at,
+            last_login=last_logins.get(u.id),
         )
         for u in users
     ]
