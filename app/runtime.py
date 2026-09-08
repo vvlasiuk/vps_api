@@ -1,4 +1,5 @@
 import os
+import re
 
 import pika
 
@@ -35,3 +36,29 @@ error_logger = ErrorLogger(
     f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}:{RABBITMQ_PORT}/{RABBITMQ_VHOST}",
     queue_name=RABBITMQ_ERROR_QUEUE,
 )
+
+
+# ── Версія API ────────────────────────────────────────────────
+# Джерело правди — перший рядок VERSION.md (формат "## 1.1.001 2026-05-22").
+# Читається ОДИН РАЗ при старті процесу (імпорт цього модуля) і кешується
+# в пам'яті на весь час його життя — так само, як версія HTML фіксується
+# в момент запису файлу, а не переобчислюється на кожен запит. Це свідомо:
+# сенс версії API — "який код зараз реально виконується цим процесом",
+# а не "що зараз лежить у VERSION.md на диску".
+_VERSION_MD_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION.md"
+)
+_VERSION_LINE_RE = re.compile(r"^##\s*([\w.\-]+)\s+(\d{4}-\d{2}-\d{2})", re.MULTILINE)
+
+
+def _read_api_version():
+    try:
+        with open(_VERSION_MD_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return None, None
+    m = _VERSION_LINE_RE.search(content)
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+API_VERSION, API_VERSION_DATE = _read_api_version()

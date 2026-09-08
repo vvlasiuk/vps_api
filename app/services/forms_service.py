@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
+from ..runtime import API_VERSION, API_VERSION_DATE
+
 # Корінь проекту → тека html/
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 HTML_DIR = os.path.join(PROJECT_ROOT, "html")
@@ -198,8 +200,12 @@ def read_form(rel_path: str) -> dict:
 
 
 def get_form_version(rel_path: str) -> dict:
-    """Легкий ендпойнт: лише версія сторінки (з <meta name="app-version">),
-    без передачі всього HTML. Повертає {path, version} (version=None, якщо міток ще немає)."""
+    """Легкий ендпойнт: версія сторінки (з <meta name="app-version">) +
+    поточна версія API (кешована в runtime при старті процесу з VERSION.md),
+    без передачі всього HTML.
+    Повертає {path, version, api_version, api_version_date}
+    (version=None, якщо міток ще немає; api_version=None, якщо VERSION.md
+    не вдалось розпарсити)."""
     abs_path = _resolve(rel_path)
     if not os.path.isfile(abs_path):
         raise HTTPException(status_code=404, detail=f"Файл не знайдено: {rel_path}")
@@ -210,7 +216,12 @@ def get_form_version(rel_path: str) -> dict:
         raise HTTPException(status_code=500, detail=f"Помилка читання: {e}")
     m = _VERSION_META_RE.search(content)
     rel = os.path.relpath(abs_path, HTML_DIR).replace("\\", "/")
-    return {"path": rel, "version": m.group(1) if m else None}
+    return {
+        "path": rel,
+        "version": m.group(1) if m else None,
+        "api_version": API_VERSION,
+        "api_version_date": API_VERSION_DATE,
+    }
 
 
 def write_form(rel_path: str, content: str, username: str = "") -> dict:
