@@ -402,9 +402,14 @@ def forms_read(
 @router.get("/forms/version")
 def forms_version(
     path: str,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
-    """Легкий ендпойнт: лише версія сторінки (без передачі всього HTML)."""
+    """Легкий ендпойнт: лише версія сторінки (без передачі всього HTML).
+    Навмисно readonly (не require_session_token): паралельні GET цього ендпоінту
+    з однієї сторінки б'ються за оновлення usage_count/last_used_at одного й того
+    самого рядка tokens і ловлять MariaDB 1020 (Record has changed since last read,
+    innodb_snapshot_isolation) на db.commit(). Ендпоінт не читає нічого з токена,
+    тож втрата usage_count/max_uses саме для цих викликів нешкідлива."""
     return get_form_version(path)
 
 @router.post("/forms/write")

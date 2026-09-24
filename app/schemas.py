@@ -1,6 +1,6 @@
 # Pydantic schemas for API requests and responses
 from pydantic import BaseModel, Field
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Literal
 from datetime import datetime
 # import httpx
 
@@ -199,12 +199,22 @@ class FormWriteRequest(BaseModel):
     path: str                                          # шлях у html/ (запис дозволено лише в pages/, menu/)
     content: str                                       # повний вміст файлу
 
+class LoggedFile(BaseModel):
+    """Один зачеплений артефакт для command_log: root ЗАВЖДИ з фіксованого
+    переліку (інше значення Pydantic відхилить запит, 422 — забути чи
+    переплутати префікс кореня стає неможливим), path — відносно цього root,
+    БЕЗ префіксу. path — той самий відносний шлях, що вже повертають
+    write_form (поле path) і save_query (path_sel / path_json): нічого
+    вручну набирати не треба, значення просто переноситься з їхньої відповіді."""
+    root: Literal["html", "queries1c", "html_command_log"]
+    path: str
+
 class CommandLogRequest(BaseModel):
     cmd:   str                                  # суть команди користувача (укр.), обов'язкове
     desc:  str                                  # короткий ASCII для імені файлу, обов'язкове
     clar:  str = ""                             # уточнення з діалогу
     why:   str = ""                             # мотив, якщо був
-    files: Optional[list[str]] = None           # зачеплені артефакти (шляхи від кореня проекту)
+    files: Optional[list[LoggedFile]] = None    # зачеплені артефакти: [{root, path}, ...]
 
 class PhotoListRequest(BaseModel):
     object_type: str                            # повний тип 1С: "Документ.X" | "Справочник.Y"

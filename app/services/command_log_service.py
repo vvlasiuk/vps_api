@@ -12,6 +12,16 @@
 # Сайдкар містить ЛИШЕ посилання — переказ команди лишається в самому лозі
 # (єдине джерело правди). Запис сайдкарів best-effort: помилка окремого
 # сайдкара не зриває створення запису журналу, а повертається у відповіді.
+#
+# files: список {root, path} (див. schemas.LoggedFile) — root ЗАВЖДИ один із
+# _ALLOWED_ROOTS (Pydantic це вже гарантує на вході запиту; перевірка тут —
+# друга лінія захисту, напр. для прямих викликів сервісу в майбутньому).
+# path — відносно root, БЕЗ префіксу кореня. Раніше (до LoggedFile) files був
+# просто списком рядків-шляхів "від кореня проекту" — саме тому один такий
+# рядок міг забути префікс "html/" чи "queries1c/" і сайдкар писався у
+# сирітську теку прямо в корені проекту (vps_api/pages/..., vps_api/catalogs/...).
+# Тепер такий шлях синтаксично неможливий: root — окреме поле з фіксованим
+# переліком значень, а не частина вільного рядка.
 
 import os
 import re
@@ -22,6 +32,9 @@ from fastapi import HTTPException
 # Корінь проекту → тека журналу команд (на рівень із html/, queries1c/)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 LOG_DIR = os.path.join(PROJECT_ROOT, "html_command_log")
+
+# Єдиний дозволений набір коренів для files[].root (дзеркалить schemas.LoggedFile.root)
+_ALLOWED_ROOTS = {"html", "queries1c", "html_command_log"}
 
 # desc для імені файлу: лише ASCII-літери/цифри/дефіс/підкреслення
 _DESC_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -52,6 +65,48 @@ def _md_line(value: str) -> str:
     return v if v else "—"
 
 
+def _split_file(f):
+    """Дістає (root, path) з одного елемента files: Pydantic-модель
+    (LoggedFile, атрибути) або dict (прямий виклик сервісу/тести).
+    Невідома форма → ("", "")."""
+    if hasattr(f, "root") and hasattr(f, "path"):
+        return str(f.root or ""), str(f.path or "")
+    if isinstance(f, dict):
+        return str(f.get("root", "") or ""), str(f.get("path", "") or "")
+    return "", ""
+
+
+def _display_rel(root: str, path: str) -> str:
+    """root+path → відносний від кореня проекту шлях лише для показу
+    (посилання в тілі запису журналу). Порожній root/path → ""."""
+    root = str(root or "").strip()
+    path = str(path or "").strip().replace("\\", "/").lstrip("/")
+    if not root or not path:
+        return ""
+    return f"{root}/{path}"
+
+
+def _resolve_in_project(root: str, rel_path: str):
+    """(root, rel_path) → абсолютний шлях у межах PROJECT_ROOT/root.
+    root має бути одним із _ALLOWED_ROOTS. Повертає None, якщо root невідомий,
+    шлях порожній або виходить за межі PROJECT_ROOT/root (напр. через "..")."""
+    root = str(root or "").strip()
+    if root not in _ALLOWED_ROOTS:
+        return None
+    rel = str(rel_path or "").strip().replace("\\", "/").lstrip("/")
+    if not rel:
+        return None
+    base = os.path.normpath(os.path.join(PROJECT_ROOT, root))
+    abs_path = os.path.normpath(os.path.join(base, rel))
+    try:
+        if os.path.commonpath([abs_path, base]) != base:
+            return None
+    except ValueError:
+        # різні диски тощо
+        return None
+    return abs_path
+
+
 def _build_content(time_iso: str, user: str, cmd: str,
                    clar: str, why: str, files: list) -> str:
     """Формує вміст .md: YAML-frontmatter (службове) + тіло (клікабельні посилання)."""
@@ -80,10 +135,11 @@ def _build_content(time_iso: str, user: str, cmd: str,
 
     if files:
         for f in files:
-            rel = str(f or "").strip().replace("\\", "/")
+            root, path = _split_file(f)
+            rel = _display_rel(root, path)
             if not rel:
                 continue
-            link = rel if rel.startswith("/") else "/" + rel
+            link = "/" + rel
             name = os.path.basename(rel)
             body.append(f"- [{name}]({link})")
     else:
@@ -105,23 +161,6 @@ def _cmd_oneline(cmd: str) -> str:
     if len(line) > _SIDECAR_CMD_MAX:
         line = line[:_SIDECAR_CMD_MAX - 1].rstrip() + "…"
     return line
-
-
-def _resolve_in_project(rel_path: str):
-    """rel_path (repo-relative, з/без провідного слеша) → абсолютний шлях у межах
-    PROJECT_ROOT. Повертає None, якщо шлях порожній або виходить за корінь."""
-    rel = str(rel_path or "").strip().replace("\\", "/").lstrip("/")
-    if not rel:
-        return None
-    abs_path = os.path.normpath(os.path.join(PROJECT_ROOT, rel))
-    root = os.path.normpath(PROJECT_ROOT)
-    try:
-        if os.path.commonpath([abs_path, root]) != root:
-            return None
-    except ValueError:
-        # різні диски тощо
-        return None
-    return abs_path
 
 
 def _write_backref(changed_abs: str, entry_line: str) -> str:
@@ -174,16 +213,20 @@ def _write_backrefs(files: list, log_rel: str, dt: datetime,
 
     seen = set()
     for f in files:
-        changed_abs = _resolve_in_project(f)
+        root, path = _split_file(f)
+        changed_abs = _resolve_in_project(root, path)
         if not changed_abs or changed_abs in seen:
             if changed_abs is None:
-                errors.append(f"пропущено (шлях поза проектом або порожній): {f!r}")
+                errors.append(
+                    f"пропущено (root/path невалідні або поза проектом): "
+                    f"root={root!r} path={path!r}"
+                )
             continue
         seen.add(changed_abs)
         try:
             written.append(_write_backref(changed_abs, entry_line))
         except OSError as e:
-            errors.append(f"{f}: {e}")
+            errors.append(f"{root}/{path}: {e}")
 
     return written, errors
 
@@ -191,6 +234,8 @@ def _write_backrefs(files: list, log_rel: str, dt: datetime,
 def log_command(cmd: str, desc: str, username: str = "",
                 clar: str = "", why: str = "", files: list = None) -> dict:
     """Створює один файл журналу команди + сайдкари-посилання біля змінених файлів.
+    files: список {root, path} (schemas.LoggedFile) — root із фіксованого
+    набору _ALLOWED_ROOTS, path — відносно root.
     Повертає {ok, file, sidecars, sidecar_errors}.
     400 — якщо cmd або desc порожні / desc не ASCII-ідентифікатор."""
     cmd_clean = str(cmd or "").strip()
