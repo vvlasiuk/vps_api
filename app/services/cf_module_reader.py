@@ -8,12 +8,16 @@ SELECT кожен: жодного парсингу, жодного завант�
 Ядро навмисно не залежить від решти vps_api — приймає шлях до БД прямо,
 тож його можна тестувати окремо. Роутер передає шлях із runtime-конфігу.
 
-Кожне з'єднання відкривається на час одного виклику (це дешево) і в режимі
-mode=ro, тому паралельні читання з threadpool FastAPI безпечні, а випадковий
-запис у похідний артефакт неможливий. З'єднання закриваються ЯВНО (контекст-
-менеджер _ro): `with sqlite3.connect(...) as c` завершує лише транзакцію, але
-НЕ закриває файл — на Windows незакритий хендл блокує атомарну підміну
-маніфесту під час регенерації.
+З'єднання: ПУЛ довгоживучих read-only з'єднань (POOL_SIZE штук), відкритих
+ОДИН РАЗ при першому зверненні й перевикористовуваних до кінця життя процесу.
+За вимірами продуктивності на реальному маніфесті (302МБ) саме ВІДКРИТТЯ
+файлу — а не виконання самого SELECT — стало домінантною витратою: навіть
+`SELECT key, value FROM meta` (дві-три строки) іноді займав 10+ секунд.
+Тому "відкривати з'єднання на кожен виклик" (як було раніше) неприйнятно
+дорого на цьому диску/машині, хоча в багатьох середовищах це справді дешево.
+Пул із кількох з'єднань дає одночасно: (а) відсутність повторного відкриття
+файлу на кожен HTTP-запит, (б) реальний паралелізм кількох одночасних SELECT
+(на відміну від єдиного спільного з'єднання на всі потоки).
 
 Пошук по коду (find_usages) шукає у двох дослівних джерелах:
   - symbols.body        — усе всередині процедур;
@@ -25,7 +29,9 @@ mode=ro, тому паралельні читання з threadpool FastAPI бе
 from __future__ import annotations
 
 import os
+import queue
 import sqlite3
+import threading
 from contextlib import contextmanager
 
 
@@ -98,26 +104,50 @@ def _line_matches(line_cf: str, needle_cf: str, match: str) -> bool:
 
 
 class ManifestReader:
+    # Кількість довгоживучих read-only з'єднань у пулі. Відкриваються лениво
+    # (при першому зверненні) і живуть до кінця процесу. 4 — розумний
+    # компроміс: дозволяє кілька одночасних SELECT без черги, не тримає
+    # надлишкових файлових хендлів. За потреби можна винести в ENV пізніше.
+    POOL_SIZE = 4
+
     def __init__(self, db_path: str | None):
         self.db_path = db_path
+        self._pool: "queue.Queue[sqlite3.Connection] | None" = None
+        self._pool_lock = threading.Lock()
 
     # --- внутрішнє ---
-    def _connect(self) -> sqlite3.Connection:
+    def _ensure_pool(self) -> "queue.Queue[sqlite3.Connection]":
         if not self.db_path or not os.path.exists(self.db_path):
             raise ManifestNotConfigured(
                 "Маніфест cf_module не знайдено. Перевірте ONEC_CF_MODULE_MANIFEST.")
-        conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        return conn
+        pool = self._pool
+        if pool is None:
+            with self._pool_lock:
+                pool = self._pool
+                if pool is None:
+                    pool = queue.Queue()
+                    for _ in range(self.POOL_SIZE):
+                        conn = sqlite3.connect(
+                            f"file:{self.db_path}?mode=ro", uri=True,
+                            check_same_thread=False)
+                        conn.row_factory = sqlite3.Row
+                        pool.put(conn)
+                    self._pool = pool
+        return pool
 
     @contextmanager
     def _ro(self):
-        """Read-only з'єднання з ЯВНИМ закриттям (не лишає відкритого хендла)."""
-        conn = self._connect()
+        """Позичає одне з довгоживучих read-only з'єднань із пулу й повертає
+        його назад після використання. НЕ відкриває й НЕ закриває файл на
+        кожен виклик (на відміну від попередньої версії) — саме повторне
+        відкриття файлу на кожен HTTP-запит і було виміряною причиною
+        затримок 6-17с, включно з тривіальними запитами на кшталт meta()."""
+        pool = self._ensure_pool()
+        conn = pool.get()
         try:
             yield conn
         finally:
-            conn.close()
+            pool.put(conn)
 
     def available(self) -> bool:
         return bool(self.db_path and os.path.exists(self.db_path))
