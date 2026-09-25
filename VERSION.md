@@ -1,3 +1,7 @@
+## 1.1.006 2026-09-25
+- cf_module_router: усі 9 ендпоінтів на require_session_token_readonly (чисті читання; лок на спільному рядку tokens при паралельних MCP-викликах давав 7-21с)
+- onec_router: /1c/metadata_objects, /1c/metadata_describe, /metadata/queries, /metadata/query_get, /metadata/generate_query, /forms/list, /forms/read, /docs/photos/list, /docs/photos/file — те саме
+
 ## 1.1.005 2026-09-24
 - cf_module_reader: пул довгоживучих read-only SQLite-з'єднань до manifest.sqlite замість відкриття нового на кожен запит — виміряно, що саме відкриття 302МБ файлу було домінантною причиною затримок 6-17с (навіть у /cf_module/meta)
 

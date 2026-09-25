@@ -277,7 +277,7 @@ def docs_photos_upload(
 @router.post("/docs/photos/list")
 def docs_photos_list(
     req: PhotoListRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Список фото обʼєкта."""
     return list_photos(req.object_type, req.ref)
@@ -288,7 +288,7 @@ def docs_photos_file(
     object_type: str,
     ref: str,
     name: str,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Віддача одного фото обʼєкта."""
     full, media = read_photo(object_type, ref, name)
@@ -306,7 +306,7 @@ def docs_photos_delete(
 
 @router.post("/1c/metadata_objects")
 def onec_metadata_objects(
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     return call_onec_read(ONEC_METADATA_OBJECTS_URL, {}, label="metadata_objects")
 
@@ -314,7 +314,7 @@ def onec_metadata_objects(
 @router.post("/1c/metadata_describe")
 def onec_metadata_describe(
     req: MetadataDescribeRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     payload = {"type": req.type, "name": req.name}
     return call_onec_read(ONEC_METADATA_DESCRIBE_URL, payload, label="metadata_describe")
@@ -323,7 +323,7 @@ def onec_metadata_describe(
 @router.post("/metadata/queries")
 def metadata_queries(
     req: MetadataQueriesRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Наявні запити (.sel/.json), прив'язані до об'єкта 1С."""
     items = query_loader.list_queries_for_object(req.object_type, req.object_name)
@@ -349,7 +349,7 @@ def metadata_save_query(
 @router.post("/metadata/query_get")
 def metadata_query_get(
     req: QueryGetRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Сирий вміст .sel/.json одного запиту (для редагування)."""
     return read_query(req.query_name)
@@ -358,7 +358,7 @@ def metadata_query_get(
 @router.post("/metadata/generate_query")
 def metadata_generate_query(
     req: GenerateQueryRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Чернетка запиту з describe об'єкта (без запису). task заданий → через AI, інакше механіка.
     Якщо передано current_sel/current_meta — AI редагує наявний запит, а не генерує з нуля."""
@@ -385,7 +385,7 @@ def backups_create(
 
 @router.post("/forms/list")
 def forms_list(
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Перелік файлів html/ (.html/.css/.js) з ознакою writable."""
     return list_forms()
@@ -394,7 +394,7 @@ def forms_list(
 @router.post("/forms/read")
 def forms_read(
     req: FormReadRequest,
-    _session_token=Depends(require_session_token),
+    _session_token=Depends(require_session_token_readonly),
 ):
     """Вміст файлу з html/ (читання дозволене по всій html/)."""
     return read_form(req.path)
